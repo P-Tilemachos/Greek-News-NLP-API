@@ -226,4 +226,4 @@ models_store/
 *.pt
 *.onnx
 .env
-mlruns/
+mlruns/scratch.py
