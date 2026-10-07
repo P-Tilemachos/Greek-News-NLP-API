@@ -13,3 +13,19 @@ class Prediction(BaseModel):
 
 class ClassifyResponse(BaseModel):
     predictions: list[Prediction]
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(..., min_length=3, max_length=500, description="Ερώτηση ή θέμα")
+    k: int = Field(5, ge=1, le=20, description="Πόσα άρθρα να επιστραφούν")
+
+
+class SearchHit(BaseModel):
+    id: str
+    score: float
+    label: str
+    snippet: str
+
+
+class SearchResponse(BaseModel):
+    results: list[SearchHit]

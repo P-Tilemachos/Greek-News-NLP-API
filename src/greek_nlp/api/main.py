@@ -6,7 +6,12 @@ from typing import Annotated, Protocol
 
 from fastapi import Depends, FastAPI
 
-from greek_nlp.api.schemas import ClassifyRequest, ClassifyResponse
+from greek_nlp.api.schemas import (
+    ClassifyRequest,
+    ClassifyResponse,
+    SearchRequest,
+    SearchResponse,
+)
 
 app = FastAPI(title="Greek News NLP API", version="0.1.0")
 
@@ -15,12 +20,23 @@ class Classifier(Protocol):
     def predict(self, text: str, top_k: int = 3) -> list[dict]: ...
 
 
+class SearchEngine(Protocol):
+    def search(self, query: str, k: int = 5) -> list[dict]: ...
+
+
 @lru_cache(maxsize=1)
 def get_classifier() -> Classifier:
     # Lazy import: το torch φορτώνεται μόνο όταν χρειαστεί
     from greek_nlp.models.classifier import NewsClassifier
 
     return NewsClassifier()
+
+
+@lru_cache(maxsize=1)
+def get_retriever() -> SearchEngine:
+    from greek_nlp.rag.retriever import Retriever
+
+    return Retriever.load()
 
 
 @app.get("/health")
@@ -34,3 +50,11 @@ def classify(
     clf: Annotated[Classifier, Depends(get_classifier)],
 ) -> ClassifyResponse:
     return ClassifyResponse(predictions=clf.predict(request.text, request.top_k))
+
+
+@app.post("/search", response_model=SearchResponse)
+def search(
+    request: SearchRequest,
+    engine: Annotated[SearchEngine, Depends(get_retriever)],
+) -> SearchResponse:
+    return SearchResponse(results=engine.search(request.query, request.k))
