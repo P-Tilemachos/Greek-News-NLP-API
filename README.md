@@ -19,6 +19,17 @@ Macro-F1 is the main metric because the classes are imbalanced (sport has about 
 
 *Confusion matrix of the TF-IDF baseline on the validation set.*
 
+## Retrieval evaluation
+
+Semantic search over the 5,250 Greek articles uses `intfloat/multilingual-e5-small` and a FAISS index; each article is embedded from its first 256 tokens. Queries were generated automatically from 300 random articles, so this is an easier test than real user questions.
+
+| Query type | Recall@1 | Recall@5 | Recall@10 | MRR@10 |
+|---|---|---|---|---|
+| Opening of the article (sanity check, near-verbatim) | 0.997 | 1.000 | 1.000 | 0.998 |
+| Sentence from the later part of the article (not in the indexed text) | 0.327 | 0.463 | 0.530 | 0.386 |
+
+The second row is the informative one: the query sentence is not part of the embedded text, so the system has to match the article by topic alone. Many news articles cover near-identical subjects while only one counts as correct, so these numbers are conservative.
+
 ## API
 
 | Endpoint | Description |
@@ -79,3 +90,4 @@ tests/       pytest suite (the classifier is mocked, so CI needs no model)
 - [ ] RAG pipeline: embeddings, retrieval, reranking, `/ask` endpoint
 - [ ] Docker image and cloud deployment with a live demo
 - [ ] Model card
+- [ ] Chunked retrieval (overlapping passages) to index the full text of each article
