@@ -29,3 +29,20 @@ class SearchHit(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[SearchHit]
+
+
+class AskRequest(BaseModel):
+    question: str = Field(..., min_length=3, max_length=500, description="Ερώτηση στα ελληνικά")
+    k: int = Field(3, ge=1, le=10, description="Πόσα άρθρα να χρησιμοποιηθούν")
+
+
+class Evidence(BaseModel):
+    doc_id: str
+    sentence: str
+    score: float
+
+
+class AskResponse(BaseModel):
+    mode: str
+    evidence: list[Evidence]
+    sources: list[SearchHit]

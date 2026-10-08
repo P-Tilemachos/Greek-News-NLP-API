@@ -36,7 +36,8 @@ The second row is the informative one: the query sentence is not part of the emb
 |---|---|
 | `GET /health` | Health check |
 | `POST /classify` | Returns the top-k predicted categories with scores for a Greek text |
-
+| `POST /search` | Semantic search over the article index, returns the top-k articles |
+| `POST /ask` | Extractive question answering: returns the most relevant sentences with article ids, plus the source articles |
 Example request:
 
 ```json
@@ -80,6 +81,7 @@ tests/       pytest suite (the classifier is mocked, so CI needs no model)
 - The classifier struggles most with broad, overlapping categories such as *society* and *human interest*.
 - Texts were truncated to 256 tokens during training and inference.
 - A class-weighted loss improves recall on small classes at the cost of precision.
+- `/ask` is extractive: it selects sentences from the retrieved articles and does not generate text. Some selected sentences can be scraping leftovers such as "read also" teasers.
 
 ## Roadmap
 
@@ -87,7 +89,8 @@ tests/       pytest suite (the classifier is mocked, so CI needs no model)
 - [x] TF-IDF baseline
 - [x] GreekBERT fine-tuning and test-set evaluation
 - [x] `/classify` endpoint with tests and CI
-- [ ] RAG pipeline: embeddings, retrieval, reranking, `/ask` endpoint
-- [ ] Docker image and cloud deployment with a live demo
+- [x] Semantic retrieval (multilingual-e5-small + FAISS) with `/search`, evaluated with Recall@k and MRR
+- [x] Extractive `/ask` endpoint returning cited evidence sentences
+- [ ] Optional generated answers when an LLM API key is configured- [ ] Docker image and cloud deployment with a live demo
 - [ ] Model card
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article

@@ -1,12 +1,11 @@
-# In order to use it try the following domain
-# http://127.0.0.1:8000/docs
-
 from functools import lru_cache
 from typing import Annotated, Protocol
 
 from fastapi import Depends, FastAPI
 
 from greek_nlp.api.schemas import (
+    AskRequest,
+    AskResponse,
     ClassifyRequest,
     ClassifyResponse,
     SearchRequest,
@@ -24,6 +23,10 @@ class SearchEngine(Protocol):
     def search(self, query: str, k: int = 5) -> list[dict]: ...
 
 
+class QAEngine(Protocol):
+    def ask(self, question: str, k: int = 3) -> dict: ...
+
+
 @lru_cache(maxsize=1)
 def get_classifier() -> Classifier:
     # Lazy import: το torch φορτώνεται μόνο όταν χρειαστεί
@@ -37,6 +40,13 @@ def get_retriever() -> SearchEngine:
     from greek_nlp.rag.retriever import Retriever
 
     return Retriever.load()
+
+
+@lru_cache(maxsize=1)
+def get_qa() -> QAEngine:
+    from greek_nlp.rag.qa import ExtractiveQA
+
+    return ExtractiveQA(get_retriever())
 
 
 @app.get("/health")
@@ -58,3 +68,11 @@ def search(
     engine: Annotated[SearchEngine, Depends(get_retriever)],
 ) -> SearchResponse:
     return SearchResponse(results=engine.search(request.query, request.k))
+
+
+@app.post("/ask", response_model=AskResponse)
+def ask(
+    request: AskRequest,
+    qa: Annotated[QAEngine, Depends(get_qa)],
+) -> AskResponse:
+    return AskResponse(**qa.ask(request.question, request.k))
