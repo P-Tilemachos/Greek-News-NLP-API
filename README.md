@@ -93,7 +93,6 @@ The index can be rebuilt locally with `python -m greek_nlp.rag.retriever` after 
 
 ## Docker
 
-
 ```bash
 docker build -t greek-news-nlp-api .
 docker run -p 8000:8000 \
