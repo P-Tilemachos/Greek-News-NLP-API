@@ -63,6 +63,14 @@ Example `/classify` request:
 
 Interactive documentation (Swagger) is available at `/docs` when the server is running.
 
+## Demo
+
+Screenshots of the API running locally (Swagger UI).
+
+![Classification](docs/demo_classify.png)
+
+![Question answering](docs/demo_ask.png)
+
 ## Quickstart
 
 ```bash
@@ -85,6 +93,7 @@ The index can be rebuilt locally with `python -m greek_nlp.rag.retriever` after 
 
 ## Docker
 
+
 ```bash
 docker build -t greek-news-nlp-api .
 docker run -p 8000:8000 \
@@ -93,6 +102,7 @@ docker run -p 8000:8000 \
   greek-news-nlp-api
 ```
 
+The trained weights and the search index are kept in private Hub repositories. To reproduce them, run notebooks 01 to 03, build the index with `python -m greek_nlp.rag.retriever`, and upload both folders to your own Hub repositories.
 The CI pipeline runs lint, format checks and tests on every push, then builds the Docker image and checks that the container answers on `/health`. The classifier and index are loaded lazily on the first request, so the container starts quickly.
 
 ## Project structure
@@ -131,7 +141,7 @@ Dockerfile   CPU image of the API
 - [x] Semantic retrieval with `/search`, evaluated with Recall@k and MRR
 - [x] Extractive `/ask` endpoint returning cited evidence sentences
 - [x] Dockerfile and Docker build check in CI
-- [ ] Cloud deployment with a live demo
+- [ ] Public live demo (attempted on Hugging Face Spaces, blocked by the free-tier CPU quota)
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article
 - [ ] Optional generated answers when an LLM API key is configured
 - [ ] Model card
