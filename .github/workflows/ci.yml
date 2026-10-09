@@ -18,3 +18,18 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t greek-news-nlp-api .
+      - name: Smoke test
+        run: |
+          docker run -d --name api -p 8000:8000 greek-news-nlp-api
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && exit 0
+            sleep 2
+          done
+          docker logs api
+          exit 1

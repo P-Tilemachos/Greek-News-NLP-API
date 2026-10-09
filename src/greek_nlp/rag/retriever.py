@@ -5,9 +5,11 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
+from greek_nlp.core.artifacts import STORE, ensure_artifact
+
 ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = ROOT / "data"
-INDEX_DIR = ROOT / "models_store" / "rag_index"
+INDEX_DIR = STORE / "rag_index"
 EMBED_MODEL = "intfloat/multilingual-e5-small"
 MAX_SEQ_LENGTH = 256
 
@@ -61,7 +63,8 @@ class Retriever:
         return cls(index, docs, model)
 
     @classmethod
-    def load(cls, index_dir: Path = INDEX_DIR) -> "Retriever":
+    def load(cls, index_dir: Path | None = None) -> "Retriever":
+        index_dir = index_dir or ensure_artifact("rag_index", "HF_INDEX_REPO")
         index = faiss.read_index(str(index_dir / "articles.faiss"))
         docs = json.loads((index_dir / "docs.json").read_text(encoding="utf-8"))
         return cls(index, docs, load_embedder())

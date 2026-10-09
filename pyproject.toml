@@ -14,7 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "httpx", "ruff", "pre-commit"]
-ml = ["torch", "transformers", "sentence-transformers", "faiss-cpu"]
+ml = ["torch", "transformers", "sentence-transformers", "faiss-cpu", "huggingface-hub"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

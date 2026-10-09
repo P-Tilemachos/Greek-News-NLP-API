@@ -1,5 +1,4 @@
 import html
-import os
 import re
 import unicodedata
 from pathlib import Path
@@ -7,8 +6,8 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-ROOT = Path(__file__).resolve().parents[3]
-MODEL_DIR = Path(os.getenv("MODEL_DIR", ROOT / "models_store" / "greek-bert-news-classifier"))
+from greek_nlp.core.artifacts import ensure_artifact
+
 MAX_LENGTH = 256
 
 
@@ -22,7 +21,8 @@ def preprocess(text: str) -> str:
 
 
 class NewsClassifier:
-    def __init__(self, model_dir: Path = MODEL_DIR):
+    def __init__(self, model_dir: Path | None = None):
+        model_dir = model_dir or ensure_artifact("greek-bert-news-classifier", "HF_MODEL_REPO")
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_dir)
         self.model.eval()
