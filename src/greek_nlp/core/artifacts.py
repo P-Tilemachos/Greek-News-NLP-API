@@ -24,3 +24,4 @@ def ensure_artifact(name: str, repo_env: str) -> Path:
         local_dir=local,
         token=os.getenv("HF_TOKEN"),
     )
+    return local
