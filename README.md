@@ -26,7 +26,7 @@ Evaluated on a held-out test set of 788 Greek news articles (17 IPTC Media Topic
 | TF-IDF + Logistic Regression (baseline) | 0.753 | 0.667 |
 | **GreekBERT (fine-tuned)** | **0.825** | **0.770** |
 
-Macro-F1 is the main metric because the classes are imbalanced (sport has about 900 articles, weather about 30).
+Macro-F1 is the main metric because the classes are imbalanced (sport has about 900 articles, weather about 30). The fine-tuned model is published on the Hugging Face Hub with a model card: [Tilemachos-P/greek-news-classifier](https://huggingface.co/Tilemachos-P/greek-news-classifier).
 
 ![Baseline confusion matrix](docs/baseline_confusion_matrix.png)
 
@@ -96,12 +96,13 @@ The index can be rebuilt locally with `python -m greek_nlp.rag.retriever` after 
 ```bash
 docker build -t greek-news-nlp-api .
 docker run -p 8000:8000 \
-  -e HF_MODEL_REPO=<username>/<classifier-repo> \
-  -e HF_INDEX_REPO=<username>/<index-repo> \
+  -e HF_MODEL_REPO=Tilemachos-P/greek-news-classifier \
+  -e HF_INDEX_REPO=Tilemachos-P/greek-news-index \
   greek-news-nlp-api
 ```
 
-The trained weights and the search index are kept in private Hub repositories. To reproduce them, run notebooks 01 to 03, build the index with `python -m greek_nlp.rag.retriever`, and upload both folders to your own Hub repositories.
+The trained classifier and the search index are public on the Hugging Face Hub: [greek-news-classifier](https://huggingface.co/Tilemachos-P/greek-news-classifier) (model) and [greek-news-index](https://huggingface.co/datasets/Tilemachos-P/greek-news-index) (dataset). No token is needed to download them. To reproduce them, run notebooks 01 to 03, build the index with `python -m greek_nlp.rag.retriever`, and upload both folders to your own Hub repositories.
+
 The CI pipeline runs lint, format checks and tests on every push, then builds the Docker image and checks that the container answers on `/health`. The classifier and index are loaded lazily on the first request, so the container starts quickly.
 
 ## Project structure
@@ -119,7 +120,7 @@ Dockerfile   CPU image of the API
 
 ## Data
 
-[EMMediaTopic 1.0](http://hdl.handle.net/11356/1991) (Kuzman and Ljubešić, Jožef Stefan Institute), Greek subset: 5,250 news articles, licensed under CC BY-SA 4.0. The data is not redistributed in this repository. Re-split 70/15/15 (stratified, seed 42) into train, validation and test.
+[EMMediaTopic 1.0](http://hdl.handle.net/11356/1991) (Kuzman and Ljubešić, Jožef Stefan Institute), Greek subset: 5,250 news articles, licensed under CC BY-SA 4.0. The data files are not stored in this GitHub repository. The article texts are included in the search index dataset on the Hugging Face Hub ([greek-news-index](https://huggingface.co/datasets/Tilemachos-P/greek-news-index)), which is distributed under the same CC BY-SA 4.0 license. Re-split 70/15/15 (stratified, seed 42) into train, validation and test.
 
 ## Limitations
 
@@ -140,7 +141,11 @@ Dockerfile   CPU image of the API
 - [x] Semantic retrieval with `/search`, evaluated with Recall@k and MRR
 - [x] Extractive `/ask` endpoint returning cited evidence sentences
 - [x] Dockerfile and Docker build check in CI
+- [x] Model card on the Hugging Face Hub
 - [ ] Public live demo (attempted on Hugging Face Spaces, blocked by the free-tier CPU quota)
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article
 - [ ] Optional generated answers when an LLM API key is configured
-- [ ] Model card
+
+## License
+
+The code is released under the MIT License (see `LICENSE`). The classifier is fine-tuned from [GreekBERT](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1) (MIT License, Copyright (c) 2020 NLP AUEB Group). The article texts in the index dataset are licensed under CC BY-SA 4.0 (see [Data](#data)).
