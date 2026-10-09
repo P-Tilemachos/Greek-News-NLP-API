@@ -17,5 +17,10 @@ def ensure_artifact(name: str, repo_env: str) -> Path:
 
     from huggingface_hub import snapshot_download
 
-    snapshot_download(repo_id=repo_id, local_dir=local, token=os.getenv("HF_TOKEN"))
-    return local
+    repo_type = "dataset" if name == "rag_index" else "model"
+    snapshot_download(
+        repo_id=repo_id,
+        repo_type=repo_type,
+        local_dir=local,
+        token=os.getenv("HF_TOKEN"),
+    )
