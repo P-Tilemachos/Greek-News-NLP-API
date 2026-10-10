@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml/badge.svg)
 
-Greek news classification and retrieval-augmented question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI.
+Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI.
 
 ## Architecture
 
@@ -34,20 +34,22 @@ Macro-F1 is the main metric because the classes are imbalanced (sport has about 
 
 ## Retrieval evaluation
 
-Semantic search over the 5,250 Greek articles uses `intfloat/multilingual-e5-small` and a FAISS index; each article is embedded from its first 256 tokens. Queries were generated automatically from 300 random articles, so this is an easier test than real user questions.
+Semantic search over the 5,250 Greek articles uses `intfloat/multilingual-e5-small` and a FAISS index. Each article is encoded with the `passage: ` prefix and a maximum sequence length of 256 tokens. Two sets of 300 queries were constructed automatically from sampled articles (seed 42); these are not a benchmark of real user questions.
 
 | Query type | Recall@1 | Recall@5 | Recall@10 | MRR@10 |
 |---|---|---|---|---|
 | Opening of the article (sanity check, near-verbatim) | 0.997 | 1.000 | 1.000 | 0.998 |
-| Sentence from the later part of the article (not in the indexed text) | 0.327 | 0.463 | 0.530 | 0.386 |
+| Sentence sampled after the first 200 whitespace-separated words | 0.327 | 0.463 | 0.530 | 0.386 |
 
-The second row is the informative one: the query sentence is not part of the embedded text, so the system has to match the article by topic alone. Many news articles cover near-identical subjects while only one counts as correct, so these numbers are conservative.
+The second evaluation uses sentences sampled after the first 200 whitespace-separated words of articles containing at least 260 words. It is more challenging than the near-verbatim opening queries. However, this word-based selection does not guarantee that every query is fully outside the first 256 tokens embedded by the model. Only the original source article counts as relevant; other articles covering the same event are not credited. These results measure source-article retrieval, not answer correctness.
+
+The retrieval corpus includes all three classification splits as a searchable knowledge base. The classifier is trained only on the training split; retrieval evaluation is a separate task.
 
 ## API
 
 | Endpoint | Description |
 |---|---|
-| `GET /health` | Health check |
+| `GET /health` | API liveness check; does not verify model or index readiness |
 | `POST /classify` | Top-k predicted categories with scores for a Greek text |
 | `POST /search` | Semantic search over the article index, returns the top-k articles |
 | `POST /ask` | Extractive question answering: the most relevant sentences with article ids, plus the source articles |
@@ -73,12 +75,33 @@ Screenshots of the API running locally (Swagger UI).
 
 ## Quickstart
 
+Use Python 3.11 inside an activated virtual or Conda environment:
+
 ```bash
 git clone https://github.com/P-Tilemachos/Greek-News-NLP-API.git
 cd Greek-News-NLP-API
-pip install -e ".[dev,ml]"
-uvicorn greek_nlp.api.main:app --reload
+python -m pip install -e ".[dev,ml]"
 ```
+
+Configure the public Hugging Face repositories and start the API.
+
+**Windows — Command Prompt / Anaconda Prompt:**
+
+```bat
+set "HF_MODEL_REPO=Tilemachos-P/greek-news-classifier"
+set "HF_INDEX_REPO=Tilemachos-P/greek-news-index"
+python -m uvicorn greek_nlp.api.main:app --reload
+```
+
+**Linux / macOS — Bash:**
+
+```bash
+export HF_MODEL_REPO=Tilemachos-P/greek-news-classifier
+export HF_INDEX_REPO=Tilemachos-P/greek-news-index
+python -m uvicorn greek_nlp.api.main:app --reload
+```
+
+Open [Swagger UI](http://127.0.0.1:8000/docs) to try the endpoints. The first request to each component may take longer while its artifacts are downloaded and loaded. Semantic search also loads `intfloat/multilingual-e5-small` from the Hub. Initial downloads require internet access.
 
 Model weights and the search index are not stored in this repository. They are loaded from `models_store/` (`greek-bert-news-classifier/` and `rag_index/`). If a folder is missing, the API downloads it from the Hugging Face Hub, using these environment variables:
 
@@ -93,17 +116,40 @@ The index can be rebuilt locally with `python -m greek_nlp.rag.retriever` after 
 
 ## Docker
 
+Run these commands from the repository root with Docker running. The single-line commands work in Bash and Windows Command Prompt / Anaconda Prompt:
+
 ```bash
 docker build -t greek-news-nlp-api .
-docker run -p 8000:8000 \
-  -e HF_MODEL_REPO=Tilemachos-P/greek-news-classifier \
-  -e HF_INDEX_REPO=Tilemachos-P/greek-news-index \
-  greek-news-nlp-api
+docker run --rm -p 8000:8000 -e HF_MODEL_REPO=Tilemachos-P/greek-news-classifier -e HF_INDEX_REPO=Tilemachos-P/greek-news-index greek-news-nlp-api
 ```
 
-The trained classifier and the search index are public on the Hugging Face Hub: [greek-news-classifier](https://huggingface.co/Tilemachos-P/greek-news-classifier) (model) and [greek-news-index](https://huggingface.co/datasets/Tilemachos-P/greek-news-index) (dataset). No token is needed to download them. To reproduce them, run notebooks 01 to 03, build the index with `python -m greek_nlp.rag.retriever`, and upload both folders to your own Hub repositories.
+This example does not mount persistent storage, so downloaded artifacts inside the container are removed when it is deleted.
 
-The CI pipeline runs lint, format checks and tests on every push, then builds the Docker image and checks that the container answers on `/health`. The classifier and index are loaded lazily on the first request, so the container starts quickly.
+The trained classifier and the search index are public on the Hugging Face Hub: [greek-news-classifier](https://huggingface.co/Tilemachos-P/greek-news-classifier) (model) and [greek-news-index](https://huggingface.co/datasets/Tilemachos-P/greek-news-index) (dataset). No token is needed to download them. For the reproduction workflow, see below.
+
+## Tests and CI
+
+```bash
+python -m pytest -q
+python -m ruff check .
+python -m ruff format --check .
+```
+
+The test suite covers API responses and input validation using mocked inference components, plus artifact download path handling and local-folder reuse using a simulated Hub download. Tests do not download model weights or require a Hugging Face token.
+
+CI runs on pushes to `main` and pull requests. Separate jobs run lint, formatting checks and tests, and build the Docker image with a `/health` smoke test. These checks do not establish real-model inference quality or model readiness. Models and the index load lazily on first use.
+
+## Reproducing the experiments
+
+1. Download EMMediaTopic 1.0 from the source linked in [Data](#data) and place `EMMediaTopic-1.0.jsonl` in `data/`.
+2. Install notebook dependencies in addition to the API dependencies: `python -m pip install jupyter pandas scikit-learn matplotlib seaborn accelerate`.
+3. Run `01_eda.ipynb` and `02_baseline.ipynb` from the `notebooks/` directory to create the splits and evaluate the baseline.
+4. Run `03_finetune_greekbert.ipynb` in a GPU-enabled Colab environment. It uses Google Drive paths: upload the split files and adapt `DATA_DIR` to your location. The notebook uses FP16 training.
+5. Copy the saved classifier folder to `models_store/greek-bert-news-classifier/`, or upload it to a Hugging Face model repository and configure `HF_MODEL_REPO`.
+6. From the repository root, run `python -m greek_nlp.rag.retriever` to build the index from `data/el_train.jsonl`, `data/el_val.jsonl` and `data/el_test.jsonl`.
+7. Run `04_retrieval_eval.ipynb` to evaluate retrieval. The index folder can be uploaded to a Hugging Face **dataset** repository and used through `HF_INDEX_REPO`.
+
+Dependencies are not currently locked to exact versions. Library versions and hardware can affect reproducibility; the reported metrics are the saved outputs of the included notebooks.
 
 ## Project structure
 
@@ -124,13 +170,15 @@ Dockerfile   CPU image of the API
 
 ## Limitations
 
-- The labels were assigned automatically by GPT-4o, not by human annotators. The dataset authors report a macro-F1 of 0.731 for these labels against a manually annotated sample, which caps what any model can reach.
+- The labels were assigned automatically by GPT-4o, not by human annotators. Classification metrics therefore measure agreement with these automatic labels, rather than verified human ground truth. Annotation errors and ambiguities may affect both training and evaluation.
 - Rare categories (weather, lifestyle and leisure, religion) have very few test examples, so their per-class scores are noisy.
-- The classifier struggles most with broad, overlapping categories such as *society* and *human interest*.
-- Texts are truncated to 256 tokens for both classification and indexing, so later parts of long articles are not searchable.
-- A class-weighted loss improves recall on small classes at the cost of precision.
+- Test-set performance varies by category, with lower F1 scores for *lifestyle and leisure* and *society*.
+- Classification and article embedding use a maximum sequence length of 256 tokens. Later text does not contribute directly to article retrieval, although `/ask` can select sentences from the full text of articles that were retrieved.
+- Training uses a class-weighted loss to address imbalance. Its effect was not isolated through an unweighted GreekBERT comparison.
 - `/ask` is extractive: it selects sentences from the retrieved articles and does not generate text. Some selected sentences can be scraping leftovers such as "read also" teasers.
-- The retrieval evaluation uses automatically generated queries, not real user questions.
+- The retrieval evaluation uses automatically generated queries, not real user questions. `/ask` answer quality has not been evaluated separately.
+- `/ask` returns the highest-ranked candidate sentences without an answerability threshold. Ambiguous or unsupported questions may therefore return related but unhelpful evidence.
+- The article corpus is static and is not a live news feed. Retrieval scores are similarity scores, not calibrated probabilities of correctness.
 
 ## Roadmap
 
