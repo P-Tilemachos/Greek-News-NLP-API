@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml/badge.svg)
 
-Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier.
+Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier and an [offline comparison of BM25, dense and hybrid retrieval](#hybrid-retrieval-benchmark-v2-notebook-08). The hybrid retriever has not been integrated into the API.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ Does an open-weight LLM beat a fine-tuned GreekBERT on Greek news topic classifi
 
 95% confidence intervals come from 1,000 bootstrap resamples of the test set. GreekBERT minus QLoRA: +5.8 points accuracy (CI +2.9 to +8.8) and +8.3 points macro-F1 (CI +3.2 to +14.1).
 
-GreekBERT was re-evaluated on the same test articles as the LLMs, using `text_clean`, a 256-token limit and batch size 8. This run gives 0.834 / 0.775, compared with the historical 0.825 / 0.770 in [Results](#results). The difference is unresolved: checkpoint identity, preprocessing, data versions and inference settings need to be compared before attributing a cause. The new figures are reported as a separate evaluation, not as an established model improvement.
+GreekBERT was re-evaluated on the same test articles as the LLMs, using `text_clean`, a 256-token limit and batch size 8. This run gives 0.834 / 0.775, compared with the historical 0.825 / 0.770 in [Results](#results). A later [preprocessing audit](notebooks/06_greekbert_audit.ipynb) found that applying the original normalization changed just 2 of 788 test predictions (raw 0.8338 / 0.7750; normalized 0.8363 / 0.7776). The original score difference remains unresolved, and checkpoint identity with the historical run has not been established. These scores are reported as separate evaluations, not as an established model improvement.
 
 \*Historical measurements on Colab T4, batch 8. GreekBERT and reloaded QLoRA timings cover synchronized forward passes on validation; the final zero-shot timings include tokenization, device transfer, forward passes and prediction extraction on test. No consistent warm-up protocol was used. VRAM is peak PyTorch allocated memory, not total device memory, and isolation from other live tensors was not verified. These figures are indicative and are not a controlled latency or memory comparison. Seconds per article at batch 8 is amortized processing time, not single-request API latency.
 
@@ -76,16 +76,46 @@ One dataset, one run per model, no QLoRA hyperparameter search, and no fine-tune
 
 ## Retrieval evaluation
 
-Semantic search over the 5,250 Greek articles uses `intfloat/multilingual-e5-small` and a FAISS index. Each article is encoded with the `passage: ` prefix and a maximum sequence length of 256 tokens. Two sets of 300 queries were constructed automatically from sampled articles (seed 42); these are not a benchmark of real user questions.
+Semantic search over the 5,250 Greek articles uses `intfloat/multilingual-e5-small` and a FAISS index. Each article is encoded with the `passage: ` prefix and a maximum sequence length of 256 tokens. The retrieval corpus contains all three classification splits as a searchable knowledge base; classification training uses only the training split. Retrieval evaluation is a separate task, not a measure of classifier performance or `/ask` answer correctness.
+
+### Original dense-only evaluation (Notebook 04)
+
+Two sets of 300 queries were generated automatically from sampled articles (seed 42). These historical results are preserved separately from the subsequent benchmark v2.
 
 | Query type | Recall@1 | Recall@5 | Recall@10 | MRR@10 |
 |---|---|---|---|---|
 | Opening of the article (sanity check, near-verbatim) | 0.997 | 1.000 | 1.000 | 0.998 |
 | Sentence sampled after the first 200 whitespace-separated words | 0.327 | 0.463 | 0.530 | 0.386 |
 
-The second evaluation uses sentences sampled after the first 200 whitespace-separated words of articles containing at least 260 words. It is more challenging than the near-verbatim opening queries. However, this word-based selection does not guarantee that every query is fully outside the first 256 tokens embedded by the model. Only the original source article counts as relevant; other articles covering the same event are not credited. These results measure source-article retrieval, not answer correctness.
+The second set samples sentences after the first 200 whitespace-separated words of articles containing at least 260 words. This word-based rule alone does not establish whether a query is fully outside the 256-token E5 input window. The gold document is the article from which the query originated, even when other articles cover the same event. See [`04_retrieval_eval.ipynb`](notebooks/04_retrieval_eval.ipynb).
 
-The retrieval corpus includes all three classification splits as a searchable knowledge base. The classifier is trained only on the training split; retrieval evaluation is a separate task.
+### Hybrid Retrieval Benchmark v2 (Notebook 08)
+
+A separate **offline**, reproducible experiment compared four retrievers over the same 5,250 articles:
+
+- **BM25 Full:** lexical retrieval over complete article texts.
+- **BM25 Matched:** lexical retrieval restricted to an article prefix selected using the E5 tokenizer's 256-token input budget (not identical tokenization to E5).
+- **Dense E5:** normalized `intfloat/multilingual-e5-small` embeddings and FAISS inner-product search; indexed passages use the 256-token limit.
+- **Hybrid RRF:** Reciprocal Rank Fusion of BM25 Full and Dense E5, with 50 candidates per retriever, equal contributions and RRF constant 60.
+
+With seed 42, the frozen query set comprises **600 source-document queries**: 300 article openings (*lead*) and 300 later article sentences (*late*). Development uses 120 queries (60 per type), and final evaluation uses 480 (240 per type), with **no shared source article IDs across these partitions**. Retrieval success means returning the originating article; we report Recall@1/5/10 and MRR@10. RRF parameters were left unchanged for final evaluation.
+
+**Final evaluation — late queries (n = 240):**
+
+| Retriever | Recall@1 | Recall@5 | Recall@10 | MRR@10 |
+|---|---:|---:|---:|---:|
+| BM25 Full | **1.0000** | **1.0000** | **1.0000** | **1.0000** |
+| BM25 Matched | 0.2542 | 0.4042 | 0.4583 | 0.3224 |
+| Dense E5 | 0.3125 | 0.4542 | 0.5125 | 0.3714 |
+| Hybrid RRF | 0.4958 | 0.8250 | 0.9583 | 0.6363 |
+
+All four retrievers achieved Recall@10 = 1.0000 on the 240 lead queries. Across all 480 final queries, Recall@10 was 1.0000 (BM25 Full), 0.7292 (BM25 Matched), 0.7562 (Dense E5) and 0.9792 (Hybrid RRF).
+
+**Findings and controls:** Hybrid RRF increased late-query Recall@10 from 0.5125 (Dense E5) to 0.9583, but did **not** outperform BM25 Full. A text-coverage audit found that 3,614/5,250 articles (68.84%) were shortened in the matched-text view; all 300 lead queries, and none of the 300 late queries, were fully contained in their matched prefixes. This is a **full-query containment** check, not a claim that every token of every late query lies outside the dense index.
+
+**Interpretation and limitations:** The queries are verbatim extracts from documents already in the searchable corpus. Full-text BM25 can therefore exploit exact text matches, explaining its perfect result on this dataset. These numbers measure retrieval of the *source article*, not relevance to independently written user questions, semantic generalization or answer quality; no human-judged relevance labels were collected. Matched BM25 aligns approximate text coverage, not the lexical and E5 representations. No reranker or controlled inference latency/VRAM comparison was evaluated here. **The API's `/search` and `/ask` endpoints still use the existing dense retriever, not this hybrid experiment.**
+
+**Reproducible artifacts:** [`08_hybrid_retrieval.ipynb`](notebooks/08_hybrid_retrieval.ipynb), [frozen queries](results/retrieval_eval_v2/queries.jsonl), [query manifest](results/retrieval_eval_v2/manifest.json), [per-query results](results/retrieval_eval_v2/evaluation_predictions.csv), [final metrics](results/retrieval_eval_v2/evaluation_metrics.csv) and [evaluation manifest](results/retrieval_eval_v2/evaluation_manifest.json). The manifests include query/source hashes, index provenance, settings, recorded software versions and known limitations.
 
 ## API
 
@@ -190,9 +220,11 @@ CI runs on pushes to `main` and pull requests. Separate jobs run lint, formattin
 5. Copy the saved classifier folder to `models_store/greek-bert-news-classifier/`, or upload it to a Hugging Face model repository and configure `HF_MODEL_REPO`.
 6. From the repository root, run `python -m greek_nlp.rag.retriever` to build the index from `data/el_train.jsonl`, `data/el_val.jsonl` and `data/el_test.jsonl`.
 7. Run `04_retrieval_eval.ipynb` to evaluate retrieval. The index folder can be uploaded to a Hugging Face **dataset** repository and used through `HF_INDEX_REPO`.
-8. Run `05_llm_benchmark.ipynb` in a GPU-enabled Colab environment (a T4 is enough). It reads the split files and the fine-tuned classifier from Google Drive paths that need to be adapted, and installs `transformers`, `peft` and `bitsandbytes`. The QLoRA adapters are not stored in this repository; the resulting metrics and predictions are in `results/`.
+8. Run `05_llm_benchmark.ipynb` in a GPU-enabled Colab environment (a T4 was used for the historical run). It reads the split files and the fine-tuned classifier from Google Drive paths that need to be adapted, and installs `transformers`, `peft` and `bitsandbytes`. The QLoRA adapters are not stored in this repository; the resulting metrics and predictions are in `results/`.
+9. Use `06_greekbert_audit.ipynb` to inspect the saved checkpoint/tokenizer and compare GreekBERT preprocessing choices; see `results/greekbert_audit/` for its recorded outputs. It does not reproduce the historical training run.
+10. Use `08_hybrid_retrieval.ipynb` in Colab **on CPU** with the three split JSONL files available under its configured Google Drive `DATA_DIR`. The notebook downloads the public FAISS index from the Hugging Face **dataset** repo, builds BM25 indexes, generates the frozen development/evaluation queries and compares the retrievers. Existing benchmark-v2 artifacts are in `results/retrieval_eval_v2/`. To rerun without overwriting existing frozen files, preserve the saved query set and manifest. No GPU, paid service or LLM API key is required for the Notebook 08 workflow.
 
-Dependencies are not currently locked to exact versions. Library versions and hardware can affect reproducibility; the reported metrics are the saved outputs of the included notebooks.
+Dependencies are not globally locked to exact versions. Library versions and hardware can affect reproducibility; the reported metrics are the saved outputs of the included notebooks. Notebook 08 records the software versions used for its evaluation in `results/retrieval_eval_v2/evaluation_manifest.json`. The separate GPU inference benchmark (`07_inference_benchmark.ipynb`) is **not completed**.
 
 ## Project structure
 
@@ -202,8 +234,8 @@ src/greek_nlp/
   core/      model and index download from the Hugging Face Hub
   models/    GreekBERT inference
   rag/       embedding retriever (FAISS) and extractive QA
-notebooks/   01 EDA, 02 TF-IDF baseline, 03 GreekBERT fine-tuning (Colab), 04 retrieval evaluation, 05 LLM benchmark (Colab)
-results/     LLM benchmark metrics and test-set predictions (no article text)
+notebooks/   01 EDA, 02 baseline, 03 GreekBERT fine-tuning, 04 dense retrieval eval, 05 LLM benchmark, 06 GreekBERT audit, 08 hybrid retrieval
+results/     classification benchmark outputs, GreekBERT audit, and retrieval_eval_v2 artifacts (the frozen queries contain article excerpts)
 docs/        screenshots and project plan
 tests/       pytest suite (models are mocked, so CI needs no weights)
 Dockerfile   CPU image of the API
@@ -221,7 +253,8 @@ Dockerfile   CPU image of the API
 - Classification and article embedding use a maximum sequence length of 256 tokens. Later text does not contribute directly to article retrieval, although `/ask` can select sentences from the full text of articles that were retrieved.
 - Training uses a class-weighted loss to address imbalance. Its effect was not isolated through an unweighted GreekBERT comparison.
 - `/ask` is extractive: it selects sentences from the retrieved articles and does not generate text. Some selected sentences can be scraping leftovers such as "read also" teasers.
-- The retrieval evaluation uses automatically generated queries, not real user questions. `/ask` answer quality has not been evaluated separately.
+- Both retrieval evaluations use automatically generated, source-document queries, not independently written user questions. Notebook 08 includes full-text BM25, which can directly match the verbatim query in its source article; its perfect score does not generalize to real-world user queries. `/ask` answer quality has not been evaluated separately.
+- BM25 Full, BM25 Matched and Hybrid RRF have been benchmarked offline, but are not yet exposed through the API. The 256-token embedding limit still applies to the deployed dense retrieval index.
 - `/ask` returns the highest-ranked candidate sentences without an answerability threshold. Ambiguous or unsupported questions may therefore return related but unhelpful evidence.
 - The article corpus is static and is not a live news feed. Retrieval scores are similarity scores, not calibrated probabilities of correctness.
 - The LLM benchmark is a single run per model on one dataset; see its own limitations above.
@@ -240,7 +273,8 @@ Dockerfile   CPU image of the API
 - [ ] Benchmark follow-up: standardize performance measurements, reconcile GreekBERT results and improve training reproducibility
 - [ ] Public live demo (attempted on Hugging Face Spaces, blocked by the free-tier CPU quota)
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article
-- [ ] Hybrid retrieval (BM25 + dense) with a reranker, evaluated with Recall@k and MRR
+- [x] Offline BM25 Full / BM25 Matched / Dense E5 / Hybrid RRF benchmark with frozen queries and Recall@k / MRR@10 (Notebook 08)
+- [ ] Evaluate a reranker and independently authored, human-assessed queries; consider integrating hybrid retrieval into `/search` after testing
 - [ ] Generative `/ask` with an open-source LLM, evaluated for faithfulness against the extractive version
 - [ ] Quantized LLM serving with streaming and evaluation regression tests in CI
 

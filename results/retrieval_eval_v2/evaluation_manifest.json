@@ -1,0 +1,83 @@
+{
+  "benchmark": "retrieval_eval_v2",
+  "bm25": {
+    "b": 0.75,
+    "epsilon": 0.25,
+    "k1": 1.5,
+    "variants": [
+      "full_text",
+      "matched_e5_token_budget"
+    ]
+  },
+  "dataset": {
+    "corpus_size": 5250,
+    "evaluation_queries": 480,
+    "gold_definition": "source article document_id",
+    "late_queries": 240,
+    "lead_queries": 240,
+    "queries_sha256": "987f805360d3a6485b111a65f15f8fb2d159389445c8d1640bc67a786ccacac5",
+    "source_file_sha256": {
+      "test": "86ec4b493b07ab286cef58a4fd447ab646d3fdbaec8dc5d6d9d20c73fde4e94b",
+      "train": "92fd48689adfcbd8413e7b52f42858fcef430ab0f9970c0151bc508b34aebe11",
+      "val": "d124de2fa8273aed325b80cb30f78adf677c876cee32797a4ca112929dfe22fb"
+    }
+  },
+  "dense_retrieval": {
+    "device": "cpu",
+    "embedding_dimensions": 384,
+    "faiss_metric": "inner_product",
+    "index_repo": "Tilemachos-P/greek-news-index",
+    "index_revision": "17c079f7c9c6a71a8a1747d8a219594260096d0a",
+    "index_sha256": {
+      "articles.faiss": "04f83dafbddcc052296fc4f4ef250d6adba85117e5810424138cd2146dbf2cef",
+      "docs.json": "8ca6a64c934769dfd09e09635013fa73cf7f80dfa70c4cc045f67958ffe51c93"
+    },
+    "loaded_model_revision_if_available": null,
+    "max_seq_length": 256,
+    "model": "intfloat/multilingual-e5-small",
+    "normalize_embeddings": true,
+    "passage_prefix": "passage: ",
+    "query_prefix": "query: "
+  },
+  "hybrid": {
+    "candidate_k": 50,
+    "inputs": [
+      "BM25 Full",
+      "Dense E5"
+    ],
+    "method": "reciprocal_rank_fusion",
+    "rrf_k": 60,
+    "top_k": 10,
+    "weights": "equal"
+  },
+  "limitations": [
+    "Queries are extracted verbatim from source articles.",
+    "Gold relevance is defined by source document ID.",
+    "All source documents are included in the search index.",
+    "This is not an evaluation on human-written questions.",
+    "Matched BM25 shares an E5-derived text budget, not the E5 tokenization or embedding representation.",
+    "The loaded E5 model revision is recorded only if available from its configuration."
+  ],
+  "metrics": [
+    "recall@1",
+    "recall@5",
+    "recall@10",
+    "mrr@10"
+  ],
+  "phase": "final_evaluation",
+  "result_files_sha256": {
+    "evaluation_metrics.csv": "d5ce8b94e7a2852df643cd6a48303e3b043a6a0ff331db855782c59810984515",
+    "evaluation_predictions.csv": "a9886c803acead0cfba9bf01223cd8ff0111feb46b3228a387393029e77d7607"
+  },
+  "software_versions": {
+    "faiss-cpu": "1.15.1",
+    "huggingface-hub": "1.33.0",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "python": "3.13.16",
+    "rank-bm25": "0.2.2",
+    "sentence-transformers": "5.7.0",
+    "torch": "2.11.0+cpu",
+    "transformers": "5.18.0"
+  }
+}

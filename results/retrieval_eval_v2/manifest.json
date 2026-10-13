@@ -1,0 +1,21 @@
+{
+  "benchmark": "retrieval_eval_v2",
+  "seed": 42,
+  "lead_queries": 300,
+  "late_queries": 300,
+  "dev_per_type": 60,
+  "evaluation_per_type": 240,
+  "query_generation": {
+    "lead": "first 20 whitespace-separated words",
+    "late": "random sentence with >=12 words from text after word 200, articles with >=260 words"
+  },
+  "corpus": "EMMediaTopic Greek subset, 5250 articles",
+  "index_repo": "Tilemachos-P/greek-news-index",
+  "index_revision": "17c079f7c9c6a71a8a1747d8a219594260096d0a",
+  "queries_sha256": "987f805360d3a6485b111a65f15f8fb2d159389445c8d1640bc67a786ccacac5",
+  "source_file_sha256": {
+    "train": "92fd48689adfcbd8413e7b52f42858fcef430ab0f9970c0151bc508b34aebe11",
+    "val": "d124de2fa8273aed325b80cb30f78adf677c876cee32797a4ca112929dfe22fb",
+    "test": "86ec4b493b07ab286cef58a4fd447ab646d3fdbaec8dc5d6d9d20c73fde4e94b"
+  }
+}
