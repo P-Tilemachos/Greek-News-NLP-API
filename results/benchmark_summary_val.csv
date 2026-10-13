@@ -1,0 +1,10 @@
+model,method,split,accuracy,macro_f1,sec_per_article,peak_vram_gb,notes
+Qwen2.5-1.5B-Instruct,"zero-shot, free generation","test (smoke, n=100)",0.45,0.3531,0.291,4.02,12% unparsed
+Qwen2.5-1.5B-Instruct,"zero-shot, letter choice",val,0.0559,0.0237,0.05,4.12,collapsed to one letter | latency measured without cuda.synchronize (underestimated)
+Qwen2.5-1.5B-Instruct,"zero-shot, first-token",val,0.5095,0.4276,0.05,4.11,latency measured without cuda.synchronize (underestimated)
+Qwen2.5-1.5B-Instruct,"zero-shot, full-label scoring (sum)",val (first 200),0.465,0.3549,3.71,4.5,no gain over first-token (0.465 / 0.3557 on same 200)
+Qwen2.5-1.5B-Instruct,"few-shot 1/class, first-token",val,0.4854,0.3853,0.525,6.05,7083 prompt tokens | latency measured without cuda.synchronize (underestimated)
+GreekBERT (fine-tuned),fine-tuned classifier,val,0.8158,0.7756,0.0162,1.57,"re-measured in this pipeline (text_clean, max_length=256, batch 8); earlier reference 0.820 / 0.784"
+Qwen2.5-3B-Instruct,"zero-shot, first-token",val,0.6264,0.5293,0.18,7.45,labour never predicted | latency measured without cuda.synchronize (underestimated)
+Qwen2.5-1.5B-Instruct,"QLoRA r=16, 1 epoch, first-token",val,0.7459,0.6553,0.25,,latency measured inside training loop; training VRAM not comparable
+Qwen2.5-1.5B-Instruct,"QLoRA r=16, 2 epochs, first-token",val,0.7649,0.6882,0.252,3.62,"adapter reloaded for inference (4-bit base + LoRA, batch 8); 118 min training on T4"
