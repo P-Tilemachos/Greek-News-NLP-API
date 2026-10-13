@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml/badge.svg)
 
-Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI.
+Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier.
 
 ## Architecture
 
@@ -31,6 +31,44 @@ Macro-F1 is the main metric because the classes are imbalanced (sport has about 
 ![Baseline confusion matrix](docs/baseline_confusion_matrix.png)
 
 *Confusion matrix of the TF-IDF baseline on the validation set.*
+
+## LLM Benchmark
+
+Does an open-source LLM beat a fine-tuned GreekBERT on Greek news topic classification (17 IPTC topics)? Prompting, fine-tuning and model size were compared under one protocol. Development decisions used the validation split (787 articles); the test split (788 articles) was evaluated once at the end.
+
+### Test-set results
+
+| Model | Accuracy (95% CI) | Macro-F1 (95% CI) | s/article* | Peak VRAM* |
+|---|---|---|---|---|
+| GreekBERT (fine-tuned) | **0.834** (0.810–0.860) | **0.775** (0.731–0.811) | 0.016 | 1.6 GB |
+| Qwen2.5-1.5B + QLoRA | 0.777 (0.746–0.806) | 0.696 (0.639–0.732) | 0.252 | 3.6 GB |
+| Qwen2.5-3B, zero-shot | 0.629 (0.596–0.665) | 0.518 (0.473–0.554) | 0.472 | 8.4 GB |
+| Qwen2.5-1.5B, zero-shot | 0.486 (0.452–0.520) | 0.402 (0.351–0.438) | 0.245 | 5.1 GB |
+
+95% confidence intervals come from 1,000 bootstrap resamples of the test set. GreekBERT minus QLoRA: +5.8 points accuracy (CI +2.9 to +8.8) and +8.3 points macro-F1 (CI +3.2 to +14.1).
+
+GreekBERT was re-evaluated in the same pipeline as the LLMs (`text_clean`, 256 tokens, batch 8), which gives 0.834 / 0.775 instead of the 0.825 / 0.770 in the [Results](#results) table above. The cause of this small difference was not investigated.
+
+\*Colab T4, batch 8, approximate. GreekBERT and QLoRA latency and VRAM were measured on the validation split, the zero-shot models on the test split.
+
+### Findings
+
+- **Fine-tuning matters more than size.** QLoRA lifted the 1.5B model by about 29 points in both accuracy and macro-F1 and beat the 3B zero-shot model.
+- **A small specialised model still wins here.** GreekBERT, a BERT-base-sized model, is more accurate than the QLoRA model, about 15x faster and uses less than half the memory. A possible reason is its Greek pretraining versus Qwen's weaker Greek tokenisation; this was not tested.
+- **Few-shot prompting did not help a 1.5B model** (validation accuracy 0.485 vs 0.510 zero-shot) while the prompt grew to about 7,000 tokens per article.
+- **Output format matters for small LLMs.** Asking for a letter (A to Q) collapsed to a single answer (validation accuracy 0.056). Scoring the first token of each label name worked. Scoring full label strings gave no gain on a 200-article validation subset and was roughly an order of magnitude slower.
+- **Weak classes.** The QLoRA model is weakest on `conflict, war and peace` (validation F1 0.40 vs 0.67 for GreekBERT) and `lifestyle and leisure` (0.18 vs 0.43, but only 8 validation examples, too few for a reliable estimate).
+
+### Method
+
+- **Zero-shot:** Qwen2.5 Instruct models. The prompt lists the 17 labels and the prediction is the label whose first token has the highest logit, so there are no unparseable outputs. Articles are truncated to 1,200 characters.
+- **QLoRA:** Qwen2.5-1.5B-Instruct in 4-bit NF4, LoRA r=16 on all attention and MLP projections, 2 epochs, learning rate 2e-4, effective batch size 16, loss on the answer tokens only, articles truncated to 800 characters, one run (seed 42), 118 minutes on a T4. No hyperparameter search. The epoch was chosen on the validation split.
+- **GreekBERT:** the fine-tuned classifier used by the API, re-evaluated in the same pipeline.
+- Notebook: [`notebooks/05_llm_benchmark.ipynb`](notebooks/05_llm_benchmark.ipynb). Metrics and test-set predictions (identifiers and labels only, no article text): [`results/`](results/).
+
+### Limitations of the benchmark
+
+One dataset, one run per model, no QLoRA tuning, and no fine-tuned 3B model (compute). Labels were assigned automatically by GPT-4o (see [Limitations](#limitations)), so the metrics measure agreement with those labels. Latency numbers are approximate and were not measured on the same split for every model. The conclusion applies to this task and setup, not to LLMs in general.
 
 ## Retrieval evaluation
 
@@ -148,6 +186,7 @@ CI runs on pushes to `main` and pull requests. Separate jobs run lint, formattin
 5. Copy the saved classifier folder to `models_store/greek-bert-news-classifier/`, or upload it to a Hugging Face model repository and configure `HF_MODEL_REPO`.
 6. From the repository root, run `python -m greek_nlp.rag.retriever` to build the index from `data/el_train.jsonl`, `data/el_val.jsonl` and `data/el_test.jsonl`.
 7. Run `04_retrieval_eval.ipynb` to evaluate retrieval. The index folder can be uploaded to a Hugging Face **dataset** repository and used through `HF_INDEX_REPO`.
+8. Run `05_llm_benchmark.ipynb` in a GPU-enabled Colab environment (a T4 is enough). It reads the split files and the fine-tuned classifier from Google Drive paths that need to be adapted, and installs `transformers`, `peft` and `bitsandbytes`. The QLoRA adapters are not stored in this repository; the resulting metrics and predictions are in `results/`.
 
 Dependencies are not currently locked to exact versions. Library versions and hardware can affect reproducibility; the reported metrics are the saved outputs of the included notebooks.
 
@@ -159,7 +198,9 @@ src/greek_nlp/
   core/      model and index download from the Hugging Face Hub
   models/    GreekBERT inference
   rag/       embedding retriever (FAISS) and extractive QA
-notebooks/   01 EDA, 02 TF-IDF baseline, 03 GreekBERT fine-tuning (Colab), 04 retrieval evaluation
+notebooks/   01 EDA, 02 TF-IDF baseline, 03 GreekBERT fine-tuning (Colab), 04 retrieval evaluation, 05 LLM benchmark (Colab)
+results/     LLM benchmark metrics and test-set predictions (no article text)
+docs/        screenshots and project plan
 tests/       pytest suite (models are mocked, so CI needs no weights)
 Dockerfile   CPU image of the API
 ```
@@ -179,6 +220,7 @@ Dockerfile   CPU image of the API
 - The retrieval evaluation uses automatically generated queries, not real user questions. `/ask` answer quality has not been evaluated separately.
 - `/ask` returns the highest-ranked candidate sentences without an answerability threshold. Ambiguous or unsupported questions may therefore return related but unhelpful evidence.
 - The article corpus is static and is not a live news feed. Retrieval scores are similarity scores, not calibrated probabilities of correctness.
+- The LLM benchmark is a single run per model on one dataset; see its own limitations above.
 
 ## Roadmap
 
@@ -190,10 +232,13 @@ Dockerfile   CPU image of the API
 - [x] Extractive `/ask` endpoint returning cited evidence sentences
 - [x] Dockerfile and Docker build check in CI
 - [x] Model card on the Hugging Face Hub
+- [x] LLM benchmark: zero-shot, few-shot and QLoRA fine-tuned Qwen2.5 vs GreekBERT, with bootstrap confidence intervals
 - [ ] Public live demo (attempted on Hugging Face Spaces, blocked by the free-tier CPU quota)
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article
-- [ ] Optional generated answers when an LLM API key is configured
+- [ ] Hybrid retrieval (BM25 + dense) with a reranker, evaluated with Recall@k and MRR
+- [ ] Generative `/ask` with an open-source LLM, evaluated for faithfulness against the extractive version
+- [ ] Quantized LLM serving with streaming and evaluation regression tests in CI
 
 ## License
 
-The code is released under the MIT License (see `LICENSE`). The classifier is fine-tuned from [GreekBERT](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1) (MIT License, Copyright (c) 2020 NLP AUEB Group). The article texts in the index dataset are licensed under CC BY-SA 4.0 (see [Data](#data)).
+The code is released under the MIT License (see `LICENSE`). The classifier is fine-tuned from [GreekBERT](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1) (MIT License, Copyright (c) 2020 NLP AUEB Group). The article texts in the index dataset are licensed under CC BY-SA 4.0 (see [Data](#data)). The LLM benchmark evaluates Qwen2.5 models (Alibaba Cloud), which are not redistributed here; see their model cards for license terms.
