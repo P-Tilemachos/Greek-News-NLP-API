@@ -19,7 +19,7 @@ flowchart LR
 
 ## Results
 
-Evaluated on a held-out test set of 788 Greek news articles (17 IPTC Media Topic categories), never used for training or model selection.
+Original classification results on the 788-article test split (17 IPTC Media Topic categories). The classifier was trained on the training split, with model selection on validation. Subsequent LLM experiments also used this test split; their evaluation history is documented below.
 
 | Model | Accuracy | Macro-F1 |
 |---|---|---|
@@ -34,7 +34,9 @@ Macro-F1 is the main metric because the classes are imbalanced (sport has about 
 
 ## LLM Benchmark
 
-Does an open-source LLM beat a fine-tuned GreekBERT on Greek news topic classification (17 IPTC topics)? Prompting, fine-tuning and model size were compared under one protocol. Development decisions used the validation split (787 articles); the test split (788 articles) was evaluated once at the end.
+Does an open-weight LLM beat a fine-tuned GreekBERT on Greek news topic classification (17 IPTC topics)? The final comparison below uses the same 788 test articles for four model configurations, with matching document IDs and reference labels. Prompt variants and QLoRA epochs were compared on the validation split (787 articles).
+
+**Evaluation history:** an initial free-generation smoke test used 100 articles sampled from the test split before the subsequent prompting experiments. The full test split was then used for the final comparison. It was therefore not completely untouched during development. The confidence intervals below describe sampling uncertainty on this test set; they do not account for possible bias from its earlier use.
 
 ### Test-set results
 
@@ -47,28 +49,30 @@ Does an open-source LLM beat a fine-tuned GreekBERT on Greek news topic classifi
 
 95% confidence intervals come from 1,000 bootstrap resamples of the test set. GreekBERT minus QLoRA: +5.8 points accuracy (CI +2.9 to +8.8) and +8.3 points macro-F1 (CI +3.2 to +14.1).
 
-GreekBERT was re-evaluated in the same pipeline as the LLMs (`text_clean`, 256 tokens, batch 8), which gives 0.834 / 0.775 instead of the 0.825 / 0.770 in the [Results](#results) table above. The cause of this small difference was not investigated.
+GreekBERT was re-evaluated on the same test articles as the LLMs, using `text_clean`, a 256-token limit and batch size 8. This run gives 0.834 / 0.775, compared with the historical 0.825 / 0.770 in [Results](#results). The difference is unresolved: checkpoint identity, preprocessing, data versions and inference settings need to be compared before attributing a cause. The new figures are reported as a separate evaluation, not as an established model improvement.
 
-\*Colab T4, batch 8, approximate. GreekBERT and QLoRA latency and VRAM were measured on the validation split, the zero-shot models on the test split.
+\*Historical measurements on Colab T4, batch 8. GreekBERT and reloaded QLoRA timings cover synchronized forward passes on validation; the final zero-shot timings include tokenization, device transfer, forward passes and prediction extraction on test. No consistent warm-up protocol was used. VRAM is peak PyTorch allocated memory, not total device memory, and isolation from other live tensors was not verified. These figures are indicative and are not a controlled latency or memory comparison. Seconds per article at batch 8 is amortized processing time, not single-request API latency.
 
 ### Findings
 
-- **Fine-tuning matters more than size.** QLoRA lifted the 1.5B model by about 29 points in both accuracy and macro-F1 and beat the 3B zero-shot model.
-- **A small specialised model still wins here.** GreekBERT, a BERT-base-sized model, is more accurate than the QLoRA model, about 15x faster and uses less than half the memory. A possible reason is its Greek pretraining versus Qwen's weaker Greek tokenisation; this was not tested.
-- **Few-shot prompting did not help a 1.5B model** (validation accuracy 0.485 vs 0.510 zero-shot) while the prompt grew to about 7,000 tokens per article.
+- **The tested QLoRA configuration improved classification.** It lifted the 1.5B model by about 29 percentage points in both accuracy and macro-F1 and beat the 3B zero-shot configuration. Prompt format, article length and precision also differ, so this is not an isolated ablation of fine-tuning alone.
+- **GreekBERT achieved the highest classification scores in this comparison.** Its historical timing and memory measurements were also lower, but a controlled performance comparison is still needed. The experiment does not isolate why it outperforms QLoRA.
+- **The tested few-shot setup did not improve validation accuracy** (0.485 vs 0.510 zero-shot). It used one training example per class and about 7,000 prompt tokens per article. Few-shot was not evaluated in the final test comparison; this result does not establish that other example selections or prompting strategies would fail.
 - **Output format matters for small LLMs.** Asking for a letter (A to Q) collapsed to a single answer (validation accuracy 0.056). Scoring the first token of each label name worked. Scoring full label strings gave no gain on a 200-article validation subset and was roughly an order of magnitude slower.
 - **Weak classes.** The QLoRA model is weakest on `conflict, war and peace` (validation F1 0.40 vs 0.67 for GreekBERT) and `lifestyle and leisure` (0.18 vs 0.43, but only 8 validation examples, too few for a reliable estimate).
 
 ### Method
 
-- **Zero-shot:** Qwen2.5 Instruct models. The prompt lists the 17 labels and the prediction is the label whose first token has the highest logit, so there are no unparseable outputs. Articles are truncated to 1,200 characters.
-- **QLoRA:** Qwen2.5-1.5B-Instruct in 4-bit NF4, LoRA r=16 on all attention and MLP projections, 2 epochs, learning rate 2e-4, effective batch size 16, loss on the answer tokens only, articles truncated to 800 characters, one run (seed 42), 118 minutes on a T4. No hyperparameter search. The epoch was chosen on the validation split.
-- **GreekBERT:** the fine-tuned classifier used by the API, re-evaluated in the same pipeline.
+- **Zero-shot:** Qwen2.5-1.5B-Instruct and Qwen2.5-3B-Instruct, both loaded in FP16 (the 3B run was not 4-bit). The prompt lists the 17 labels and the prediction is the label whose first token has the highest logit, so there are no unparseable outputs. Articles are truncated to 1,200 characters.
+- **QLoRA:** Qwen2.5-1.5B-Instruct in 4-bit NF4, LoRA r=16 on all attention and MLP projections, 2 epochs, learning rate 2e-4, effective batch size 16, loss on the answer tokens only, articles truncated to 800 characters, one training run, 118 minutes on a T4. Seed 42 was set in the training cell after adapter initialization, so the initial LoRA weights were not controlled by that seed. No hyperparameter search. The epoch was chosen on the validation split.
+- **GreekBERT:** the saved fine-tuned classifier from Google Drive, re-evaluated on the same test articles. Its checkpoint identity relative to the published API model has not been verified.
+- **Input budgets:** GreekBERT uses 256 tokens, zero-shot Qwen uses 1,200 characters and QLoRA uses 800 characters. These are configuration comparisons, not comparisons under equal input budgets.
+- **Training-loop limitation:** the saved QLoRA run uses floor division for batches and steps. With 3,675 examples, batch size 4 and accumulation 4, three examples are omitted and gradients from the last two full batches are not applied at each epoch end. Future runs should handle both remainders. The reported metrics remain those of the original run.
 - Notebook: [`notebooks/05_llm_benchmark.ipynb`](notebooks/05_llm_benchmark.ipynb). Metrics and test-set predictions (identifiers and labels only, no article text): [`results/`](results/).
 
 ### Limitations of the benchmark
 
-One dataset, one run per model, no QLoRA tuning, and no fine-tuned 3B model (compute). Labels were assigned automatically by GPT-4o (see [Limitations](#limitations)), so the metrics measure agreement with those labels. Latency numbers are approximate and were not measured on the same split for every model. The conclusion applies to this task and setup, not to LLMs in general.
+One dataset, one run per model, no QLoRA hyperparameter search, and no fine-tuned 3B model. Labels were assigned automatically by GPT-4o (see [Limitations](#limitations)), so the metrics measure agreement with those labels. The initial test-subset smoke experiment, differing input budgets and measurement protocols limit the comparison. Bootstrap intervals do not measure variability across training seeds. Dependencies and model revisions were not pinned. TF-IDF remains a historical baseline and is not included in the four-model paired bootstrap comparison. A cost-per-1,000-requests estimate has not been produced. The conclusions apply to these configurations and this dataset, not to LLMs in general.
 
 ## Retrieval evaluation
 
@@ -232,7 +236,8 @@ Dockerfile   CPU image of the API
 - [x] Extractive `/ask` endpoint returning cited evidence sentences
 - [x] Dockerfile and Docker build check in CI
 - [x] Model card on the Hugging Face Hub
-- [x] LLM benchmark: zero-shot, few-shot and QLoRA fine-tuned Qwen2.5 vs GreekBERT, with bootstrap confidence intervals
+- [x] Initial LLM benchmark: zero-shot and QLoRA vs GreekBERT on test with bootstrap confidence intervals; few-shot experiments on validation
+- [ ] Benchmark follow-up: standardize performance measurements, reconcile GreekBERT results and improve training reproducibility
 - [ ] Public live demo (attempted on Hugging Face Spaces, blocked by the free-tier CPU quota)
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article
 - [ ] Hybrid retrieval (BM25 + dense) with a reranker, evaluated with Recall@k and MRR
