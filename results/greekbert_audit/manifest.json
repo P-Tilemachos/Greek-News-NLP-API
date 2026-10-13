@@ -1,0 +1,14 @@
+{
+  "created_utc": "2026-10-13T18:29:46.825226+00:00",
+  "python": "3.13.16",
+  "transformers": "5.18.0",
+  "torch": "2.11.0+cpu",
+  "device": "cpu",
+  "test_sha256": "86ec4b493b07ab286cef58a4fd447ab646d3fdbaec8dc5d6d9d20c73fde4e94b",
+  "model_files_sha256": {
+    "config.json": "dc131db3492984196c23c6373743bcd6b6d4e33aae594ec26e874279de4e72fa",
+    "model.safetensors": "fe6f1d4a2f05f2dbce05bec6da76e05a317b68c2567c3977aa954c63bf7f49db",
+    "tokenizer.json": "e05d0c5c575bd892b8923c8b49630513a7c047bedd31a5f86658e151e381d65d",
+    "tokenizer_config.json": "9f0c2c65a70ea18113ffa2e717103e7210ea826e7acc3442b69b346686b55a48"
+  }
+}
