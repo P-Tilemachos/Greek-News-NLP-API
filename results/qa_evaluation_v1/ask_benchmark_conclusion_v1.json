@@ -1,0 +1,113 @@
+{
+  "benchmark": {
+    "api_revision": "f796f1570bb26efa34561937326a0e5c76e2640e",
+    "automated_metrics": [
+      {
+        "evidence_doc_hit": 0.975,
+        "exact_quote_hit": 0.65,
+        "group": "all_40",
+        "latency_mean_s": 6.98586149152502,
+        "latency_median_s": 6.313824867999756,
+        "latency_p95_s": 8.0134870038014,
+        "mean_quote_token_recall": 0.7887316611303241,
+        "n_questions": 40,
+        "n_unique_documents": 32,
+        "source_hit@1": 0.95,
+        "source_hit@10": 0.975,
+        "source_hit@3": 0.95,
+        "source_hit@5": 0.975
+      },
+      {
+        "evidence_doc_hit": 0.96875,
+        "exact_quote_hit": 0.625,
+        "group": "initial_32",
+        "latency_mean_s": 7.20982820759383,
+        "latency_median_s": 6.357000417499876,
+        "latency_p95_s": 8.19179773925034,
+        "mean_quote_token_recall": 0.783641849140178,
+        "n_questions": 32,
+        "n_unique_documents": 32,
+        "source_hit@1": 0.96875,
+        "source_hit@10": 0.96875,
+        "source_hit@3": 0.96875,
+        "source_hit@5": 0.96875
+      },
+      {
+        "evidence_doc_hit": 1.0,
+        "exact_quote_hit": 0.75,
+        "group": "additional_8",
+        "latency_mean_s": 6.08999462724978,
+        "latency_median_s": 6.063937109999642,
+        "latency_p95_s": 7.729619192250902,
+        "mean_quote_token_recall": 0.8090909090909091,
+        "n_questions": 8,
+        "n_unique_documents": 8,
+        "source_hit@1": 0.875,
+        "source_hit@10": 1.0,
+        "source_hit@3": 0.875,
+        "source_hit@5": 1.0
+      }
+    ],
+    "endpoint": "/ask",
+    "k": 10,
+    "per_document_macro": {
+      "evidence_doc_hit": 0.96875,
+      "hit@1": 0.953125,
+      "hit@10": 0.96875,
+      "hit@3": 0.953125,
+      "hit@5": 0.96875
+    },
+    "retrieval_backend": "Existing API retriever; dense E5 + FAISS"
+  },
+  "dataset": {
+    "answerable_only": true,
+    "frozen": true,
+    "n_questions": 40,
+    "n_unique_documents": 32,
+    "sha256": "f60fb47301b3d5df2e2d60fff73588671e039717c83f22b234cce9cbd6ea772c"
+  },
+  "experiment": "extractive_qa_answerable_benchmark_v1",
+  "limitations": [
+    "Answerable-only evaluation.",
+    "40 questions from 32 unique documents.",
+    "Eight documents contribute a second question.",
+    "Evaluation questions were AI-assisted and author-reviewed.",
+    "Source retrieval accuracy is not answer accuracy.",
+    "Exact evidence matching is a lexical diagnostic.",
+    "Only 15 flagged cases have semantic judgments.",
+    "The 25 unflagged cases were not separately semantically adjudicated.",
+    "Approved judgments originated from assistant proposals.",
+    "No independent blind annotator was used.",
+    "The API returns extractive evidence, not generated answers.",
+    "No unanswerable or abstention evaluation was performed.",
+    "The evaluation set must not be reused for unreported model selection."
+  ],
+  "manual_review": {
+    "flagged_case_metrics": {
+      "correct": 4,
+      "correct_rate_flagged": 0.26666666666666666,
+      "incorrect": 8,
+      "incorrect_rate_flagged": 0.5333333333333333,
+      "n_reviewed": 15,
+      "partial": 3,
+      "partial_rate_flagged": 0.2
+    },
+    "judgment_counts": {
+      "Correct": 4,
+      "Incorrect": 8,
+      "Partial": 3
+    },
+    "n_flagged": 15,
+    "n_unflagged_not_manually_checked": 25,
+    "review_provenance": "Assistant-proposed judgments approved by project author in conversation.",
+    "scope": "15 flagged cases"
+  },
+  "schema_version": 1,
+  "source_artifacts": {
+    "automated_report_sha256": "1132676bf1471e8d33f7a86e23f1130a4bcac147fc3fda5298e93f177f919a26",
+    "dataset_sha256": "f60fb47301b3d5df2e2d60fff73588671e039717c83f22b234cce9cbd6ea772c",
+    "error_analysis_sha256": "dd06461fc51c94cb2364ff3bee2097e7dfbbdd003a5d4362f93389114b75e690",
+    "predictions_sha256": "43cc5698bddf9807bd5a9bdb85006d14dcea39526a3500cc9deeb5ce51ccb778"
+  },
+  "status": "evaluation_and_flagged_review_complete"
+}

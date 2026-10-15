@@ -138,6 +138,32 @@ Queries are verbatim source-article excerpts, and the gold target is the origina
 
 Saved outputs: [per-query ranks](results/reranking_eval_v1/frozen_eval_v1/evaluation_query_results_480.csv), [metrics](results/reranking_eval_v1/frozen_eval_v1/evaluation_metrics_480.csv), and [final report](results/reranking_eval_v1/frozen_eval_v1/evaluation_final_report_480.json). The report records the model revision and hashes of the protocol, corpus, frozen queries, candidates and predictions; full reproduction also requires those referenced artifacts and the evaluation notebook.
 
+## Extractive QA evaluation (Notebook 10)
+
+**Public Notebook 10:** [Extractive QA Evaluation](notebooks/10_qa_evaluation.ipynb)
+
+The extractive `/ask` endpoint was evaluated using a frozen answerable QA benchmark containing **40 questions from 32 unique Greek news articles**.
+
+| Metric | Result |
+|---|---:|
+| Source Hit@1 | 95.00% |
+| Source Hit@3 | 95.00% |
+| Source Hit@5 | 97.50% |
+| Source Hit@10 | 97.50% |
+| Evidence Document Hit | 97.50% |
+| Exact Evidence Quote Match | 65.00% |
+| Mean Evidence Token Recall | 0.7887 |
+
+**Evaluation configuration:** 40 answerable questions, `k=10`, frozen dataset, 40 saved API responses.
+
+A semantic review of 15 flagged cases produced **4 Correct, 3 Partial and 8 Incorrect** assessments. These assistant-proposed judgments were approved by the project author; they are not an independent blind annotation study. The 25 unflagged cases were not separately semantically adjudicated.
+
+**Important:** Source retrieval accuracy is not final answer accuracy. The API returns extractive evidence sentences rather than standalone generated answers.
+
+The benchmark does not evaluate unanswerable questions or abstention.
+
+See the [QA evaluation report](docs/qa_evaluation.md) and the [reproducibility artifacts](results/qa_evaluation_v1/).
+
 ## API
 
 | Endpoint | Description |
@@ -245,6 +271,9 @@ CI runs on pushes to `main` and pull requests. Separate jobs run lint, formattin
 9. Use `06_greekbert_audit.ipynb` to inspect the saved checkpoint/tokenizer and compare GreekBERT preprocessing choices; see `results/greekbert_audit/` for its recorded outputs. It does not reproduce the historical training run.
 10. Use `08_hybrid_retrieval.ipynb` in Colab **on CPU** with the three split JSONL files available under its configured Google Drive `DATA_DIR`. The notebook downloads the public FAISS index from the Hugging Face **dataset** repo, builds BM25 indexes, generates the frozen development/evaluation queries and compares the retrievers. Existing benchmark-v2 artifacts are in `results/retrieval_eval_v2/`. To rerun without overwriting existing frozen files, preserve the saved query set and manifest. No GPU, paid service or LLM API key is required for the Notebook 08 workflow.
 
+11. Review `09_cross_encoder_reranking.ipynb` and the saved offline evaluation in `results/reranking_eval_v1/frozen_eval_v1/`. Reproducing the original rankings requires the underlying frozen candidates, queries and model revision documented in the experiment report; this is not the deployed API retriever.
+12. Run the public `10_qa_evaluation.ipynb` to verify the published **aggregate** answerable-QA metrics in `results/qa_evaluation_v1/`. This public notebook does not rerun `/ask` inference or include the private questions, reference evidence and predictions required for the complete evaluation. See [`docs/qa_evaluation.md`](docs/qa_evaluation.md) for interpretation and limitations.
+
 Dependencies are not globally locked to exact versions. Library versions and hardware can affect reproducibility; the reported metrics are the saved outputs of the included notebooks. Notebook 08 records the software versions used for its evaluation in `results/retrieval_eval_v2/evaluation_manifest.json`. The separate GPU inference benchmark (`07_inference_benchmark.ipynb`) is **not completed**.
 
 ## Project structure
@@ -255,9 +284,9 @@ src/greek_nlp/
   core/      model and index download from the Hugging Face Hub
   models/    GreekBERT inference
   rag/       embedding retriever (FAISS) and extractive QA
-notebooks/   01 EDA, 02 baseline, 03 GreekBERT fine-tuning, 04 dense retrieval eval, 05 LLM benchmark, 06 GreekBERT audit, 08 hybrid retrieval
-results/     classification benchmark outputs, GreekBERT audit, and retrieval_eval_v2 artifacts (the frozen queries contain article excerpts)
-docs/        screenshots and project plan
+notebooks/   01–06 classification/retrieval/LLM experiments, 08 hybrid retrieval, 09 cross-encoder, 10 public QA evaluation (07 GPU inference remains pending)
+results/     classification benchmarks, GreekBERT audit, retrieval/reranking evaluations and published QA aggregates (some retrieval queries contain article excerpts)
+docs/        screenshots, project plan and QA evaluation report
 tests/       pytest suite (models are mocked, so CI needs no weights)
 Dockerfile   CPU image of the API
 ```
@@ -274,7 +303,7 @@ Dockerfile   CPU image of the API
 - Classification and article embedding use a maximum sequence length of 256 tokens. Later text does not contribute directly to article retrieval, although `/ask` can select sentences from the full text of articles that were retrieved.
 - Training uses a class-weighted loss to address imbalance. Its effect was not isolated through an unweighted GreekBERT comparison.
 - `/ask` is extractive: it selects sentences from the retrieved articles and does not generate text. Some selected sentences can be scraping leftovers such as "read also" teasers.
-- The retrieval evaluations use automatically generated, source-document queries, not independently written user questions. Notebook 08 includes full-text BM25, which can directly match the verbatim query in its source article; its perfect score does not generalize to real-world user queries. `/ask` answer quality has not been evaluated separately.
+- The synthetic retrieval evaluations (Notebooks 04, 08 and 09) use automatically generated, source-document queries, not independently written user questions. Notebook 08 includes full-text BM25, which can directly match verbatim queries in their source articles; its perfect score does not generalize to real-world user queries. Notebook 10 separately evaluates extractive `/ask` on 40 answerable questions from 32 articles, measuring source retrieval and evidence selection, with semantic review of 15 flagged cases. These results do not establish overall answer accuracy or performance on unanswerable questions.
 - BM25 Full, BM25 Matched, Hybrid RRF and Top-5 Cross-Encoder reranking have been benchmarked offline, but are not yet exposed through the API. The 256-token embedding limit still applies to the deployed dense retrieval index.
 - `/ask` returns the highest-ranked candidate sentences without an answerability threshold. Ambiguous or unsupported questions may therefore return related but unhelpful evidence.
 - The article corpus is static and is not a live news feed. Retrieval scores are similarity scores, not calibrated probabilities of correctness.
@@ -296,6 +325,7 @@ Dockerfile   CPU image of the API
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article
 - [x] Offline BM25 Full / BM25 Matched / Dense E5 / Hybrid RRF benchmark with frozen queries and Recall@k / MRR@10 (Notebook 08)
 - [x] Offline Top-5 Cross-Encoder reranking evaluation on 480 frozen queries (Notebook 09 evaluation)
+- [x] Extractive `/ask` QA benchmark on 40 answerable questions from 32 articles, with frozen evaluation, evidence metrics, and flagged-case semantic review (Notebook 10)
 - [ ] Evaluate independently authored, human-assessed queries and integrate hybrid retrieval / reranking into `/search` after testing
 - [ ] Generative `/ask` with an open-source LLM, evaluated for faithfulness against the extractive version
 - [ ] Quantized LLM serving with streaming and evaluation regression tests in CI

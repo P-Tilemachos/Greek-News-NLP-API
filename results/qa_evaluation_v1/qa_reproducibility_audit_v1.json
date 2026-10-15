@@ -1,0 +1,142 @@
+{
+  "api_revision": "f796f1570bb26efa34561937326a0e5c76e2640e",
+  "artifact_inventory": [
+    {
+      "path": "results/qa_eval_v1/qa_eval_answerable_batch_01_v1.json",
+      "sha256": "e10870d4de49521dd18e0130f1c70b15c8cf27920254224077671c0b1d72be87",
+      "size_bytes": 8967
+    },
+    {
+      "path": "results/qa_eval_v1/qa_eval_answerable_batch_02_v1.json",
+      "sha256": "391f7a2e360d9a79f71072f26b7e9cf2999559a04014ede0bace28c01b67081e",
+      "size_bytes": 8921
+    },
+    {
+      "path": "results/qa_eval_v1/qa_eval_answerable_batch_03_v1.json",
+      "sha256": "fed6ecb643bac57c541247cbe204d341aa2be7f5f681afbf999dc65a3139014a",
+      "size_bytes": 9487
+    },
+    {
+      "path": "results/qa_eval_v1/qa_eval_answerable_batch_04_v1.json",
+      "sha256": "153be1378135032e584cd0a3c39ef58a1924edc7ea8abd1dbb998b84cba80b97",
+      "size_bytes": 8233
+    },
+    {
+      "path": "results/qa_eval_v1/qa_eval_answerable_batch_05_v1.json",
+      "sha256": "cc0d44e38ee1a6ee053f2559b5a689a834b95de296b3287f2f9a1c2078125b0f",
+      "size_bytes": 8264
+    },
+    {
+      "path": "results/qa_eval_v1/qa_eval_answerable_40_v1.json",
+      "sha256": "f60fb47301b3d5df2e2d60fff73588671e039717c83f22b234cce9cbd6ea772c",
+      "size_bytes": 41496
+    },
+    {
+      "path": "results/qa_eval_v1/qa_eval_answerable_manifest_v1.json",
+      "sha256": "f155f71e7b4430d8ca589b9ce0c002b52a575933f0c28114c2e5855598a8127d",
+      "size_bytes": 1550
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/benchmark_config.json",
+      "sha256": "a62a685b820ba7e821be822b1800fe34ab02313e51588cfb55f5adc4e61fa6d8",
+      "size_bytes": 609
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_predictions_40.jsonl",
+      "sha256": "43cc5698bddf9807bd5a9bdb85006d14dcea39526a3500cc9deeb5ce51ccb778",
+      "size_bytes": 330986
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_predictions_manifest.json",
+      "sha256": "b2084d3c98e45941efbf730c66554245fb8e097e27fbe929de6bccc49ed5708b",
+      "size_bytes": 388
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_query_metrics_40.csv",
+      "sha256": "6801b6f8fb3070e5320b616de0a2d1d51777f669a2e3612d5b94dbff0c7dbdd0",
+      "size_bytes": 3703
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_final_metrics_40.csv",
+      "sha256": "fcb4ebcd1af4806bdc9611cc2dfa382c7d48ba19af37bdeab32f67a76290272e",
+      "size_bytes": 570
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_final_report_40.json",
+      "sha256": "1132676bf1471e8d33f7a86e23f1130a4bcac147fc3fda5298e93f177f919a26",
+      "size_bytes": 3139
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_error_analysis_40.json",
+      "sha256": "dd06461fc51c94cb2364ff3bee2097e7dfbbdd003a5d4362f93389114b75e690",
+      "size_bytes": 37240
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_error_analysis_manifest.json",
+      "sha256": "a7a3bb0031245fca91ceae839f2b84fd296b75e25abef18f58ecd4abd1045196",
+      "size_bytes": 719
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_manual_review_15_v1.json",
+      "sha256": "b941b02194386136ef9dc3d4ce924311b48760a032f9aa31bd6e39662d2435bf",
+      "size_bytes": 15100
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_manual_review_15_v1.csv",
+      "sha256": "dc7b325612950fffd19219230c0afd8e2a28ea507b65ba27b6fe1bebfcd70b02",
+      "size_bytes": 9492
+    },
+    {
+      "path": "results/qa_eval_v1/ask_benchmark_v1/ask_benchmark_conclusion_v1.json",
+      "sha256": "ec8d5cbc9ce96cd4688c252576243e5aba4c45b377452a032448b7b6c18c01eb",
+      "size_bytes": 3969
+    }
+  ],
+  "automated_metrics": {
+    "evidence_document_hit": 0.975,
+    "exact_quote_hit": 0.65,
+    "mean_quote_token_recall": 0.7887316611303241,
+    "source_hit_at_1": 0.95,
+    "source_hit_at_10": 0.975,
+    "source_hit_at_3": 0.95,
+    "source_hit_at_5": 0.975
+  },
+  "dataset": {
+    "answerable_only": true,
+    "frozen": true,
+    "full_qa_dataset_complete": false,
+    "n_questions": 40,
+    "n_unique_documents": 32,
+    "sha256": "f60fb47301b3d5df2e2d60fff73588671e039717c83f22b234cce9cbd6ea772c"
+  },
+  "endpoint": "/ask",
+  "experiment": "extractive_qa_answerable_benchmark_v1",
+  "flagged_review": {
+    "correct": 4,
+    "incorrect": 8,
+    "n_reviewed": 15,
+    "n_unflagged_not_semantically_reviewed": 25,
+    "partial": 3,
+    "provenance": "Assistant-proposed judgments approved by project author; not a blind annotation study."
+  },
+  "k": 10,
+  "limitations": [
+    "Answerable questions only.",
+    "40 questions from 32 documents.",
+    "Eight documents contribute two questions.",
+    "Only 15 flagged cases have semantic judgments.",
+    "The remaining 25 questions were not independently semantically adjudicated.",
+    "Source Hit is not answer accuracy.",
+    "The API returns evidence rather than generated answers.",
+    "No unanswerable or abstention benchmark.",
+    "Hit@1/3/5 calculated from k=10 retrieval output."
+  ],
+  "predictions": {
+    "n_completed": 40,
+    "sha256": "43cc5698bddf9807bd5a9bdb85006d14dcea39526a3500cc9deeb5ce51ccb778"
+  },
+  "schema_version": 1,
+  "status": "reproducibility_audit_passed",
+  "summary_file": "QA_BENCHMARK_SUMMARY_v1.md",
+  "summary_sha256": "84578e08dee2abab31029eb852ebe78cd856001e9a975449a72835ee9b394061"
+}
