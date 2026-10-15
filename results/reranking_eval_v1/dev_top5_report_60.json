@@ -1,0 +1,68 @@
+{
+  "candidate_sha256": "f95253f6fa83388e28880f40e21c2eac379d9b394ae412510ab1f199d7ccb057",
+  "cpu_inference": {
+    "mean_seconds_per_query": 35.6093999417333,
+    "total_seconds": 2136.563996503998
+  },
+  "evaluation_queries_used": false,
+  "experiment": "cross_encoder_development_top5",
+  "limitations": [
+    "Synthetic source-article queries.",
+    "Single relevant source document per query.",
+    "Full-text BM25 has an exact-match advantage.",
+    "Top-5 reranking has an 85% development Recall@1 upper bound.",
+    "Cross-Encoder truncates pairs to 512 tokens.",
+    "59 of 60 development gold pairs exceed the 512-token limit.",
+    "CPU inference is comparatively expensive.",
+    "No evaluation queries used for model selection.",
+    "Pilot results do not establish generalization."
+  ],
+  "metrics": {
+    "cross_encoder": {
+      "mrr@10": 0.7975859788359789,
+      "recall@1": 0.7166666666666667,
+      "recall@10": 0.9833333333333333,
+      "recall@5": 0.85
+    },
+    "hybrid_rrf": {
+      "mrr@10": 0.7120304232804233,
+      "recall@1": 0.6,
+      "recall@10": 0.9833333333333333,
+      "recall@5": 0.85
+    }
+  },
+  "model": {
+    "batch_size": 2,
+    "device": "cpu",
+    "id": "BAAI/bge-reranker-v2-m3",
+    "max_length": 512,
+    "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+  },
+  "n_queries": 60,
+  "partition": "dev",
+  "protocol_sha256": "9778de1aab6e6d7a09c8359c41a5b07703b542ef6a8a761f3a051b1376c03750",
+  "query_type": "late",
+  "ranking_outcomes": {
+    "DEGRADED": 3,
+    "IMPROVED": 13,
+    "UNCHANGED": 44
+  },
+  "result_files": {
+    "individual_checkpoints": "dev_top5_checkpoints",
+    "metrics": "dev_top5_metrics_60.csv",
+    "metrics_sha256": "2cd45ce76e4aa7a99050f6c7034e20b2c88b184edc701dbdbe3eab8e11d1ccde",
+    "predictions": "dev_top5_predictions_60.csv",
+    "predictions_sha256": "9b6603f91fa0d44eb16cac2aa16487b70dd8f71524f01b5ab996fcb8c948c3a8"
+  },
+  "retrieval": {
+    "baseline": "Hybrid RRF",
+    "bm25_candidate_k": 50,
+    "candidate_order": "Hybrid RRF rank",
+    "dense_candidate_k": 50,
+    "remaining_candidates": "Retain original Hybrid RRF ordering after the reranked Top-5",
+    "rerank_sort": "Descending Cross-Encoder score; tie-break by Hybrid rank and document ID",
+    "rerank_top_k": 5,
+    "rrf_k": 60
+  },
+  "status": "development_complete"
+}

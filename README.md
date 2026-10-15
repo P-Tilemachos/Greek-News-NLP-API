@@ -117,6 +117,27 @@ All four retrievers achieved Recall@10 = 1.0000 on the 240 lead queries. Across 
 
 **Reproducible artifacts:** [`08_hybrid_retrieval.ipynb`](notebooks/08_hybrid_retrieval.ipynb), [frozen queries](results/retrieval_eval_v2/queries.jsonl), [query manifest](results/retrieval_eval_v2/manifest.json), [per-query results](results/retrieval_eval_v2/evaluation_predictions.csv), [final metrics](results/retrieval_eval_v2/evaluation_metrics.csv) and [evaluation manifest](results/retrieval_eval_v2/evaluation_manifest.json). The manifests include query/source hashes, index provenance, settings, recorded software versions and known limitations.
 
+### Cross-Encoder reranking (Notebook 09 evaluation)
+
+An offline experiment reranked the **Top-5 Hybrid RRF candidates** with `BAAI/bge-reranker-v2-m3` (revision `953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e`), using CPU inference, batch size 2 and a 512-token query-document input limit. Candidates below rank 5 retained their original order. The frozen evaluation uses the same 480 queries as Notebook 08: 240 lead and 240 late queries, separate from development.
+
+| Query subset | Method | Recall@1 | Recall@5 | Recall@10 | MRR@10 |
+|---|---|---:|---:|---:|---:|
+| Lead (240) | Hybrid RRF | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Lead (240) | + Cross-Encoder | 0.9958 | 1.0000 | 1.0000 | 0.9979 |
+| Late (240) | Hybrid RRF | 0.4958 | 0.8250 | 0.9583 | 0.6363 |
+| Late (240) | + Cross-Encoder | **0.7083** | 0.8250 | 0.9583 | **0.7710** |
+| Overall (480) | Hybrid RRF | 0.7479 | 0.9125 | 0.9792 | 0.8181 |
+| Overall (480) | + Cross-Encoder | 0.8521 | 0.9125 | 0.9792 | 0.8845 |
+
+On late queries, reranking increased Recall@1 by **21.25 percentage points** and MRR@10 by **0.1348** (calculated before rounding): 67 source-document ranks improved, 11 worsened and 162 were unchanged. Lead queries had one degradation and 239 unchanged ranks. Recall@5 and Recall@10 cannot change when only the Top-5 are reordered. The late-query Recall@1 ceiling for this candidate pool is 0.8250. Full-text BM25 still achieves 1.0000 on these synthetic late queries; reranking does not outperform that baseline here.
+
+The recorded mean Cross-Encoder inference time was **27.62 seconds per query** across the checkpointed CPU runs. This excludes model loading and Hybrid retrieval, spans resumed sessions and is not a controlled hardware comparison or end-to-end API latency. At this measured speed, the quality improvement has a substantial serving cost.
+
+Queries are verbatim source-article excerpts, and the gold target is the originating article rather than independently judged relevance. Full-text BM25 benefits from exact matches; input truncation also limits the reranker. These results do not establish performance on real user questions or generated-answer faithfulness. **Hybrid retrieval and reranking remain offline experiments; the API still uses Dense E5.**
+
+Saved outputs: [per-query ranks](results/reranking_eval_v1/frozen_eval_v1/evaluation_query_results_480.csv), [metrics](results/reranking_eval_v1/frozen_eval_v1/evaluation_metrics_480.csv), and [final report](results/reranking_eval_v1/frozen_eval_v1/evaluation_final_report_480.json). The report records the model revision and hashes of the protocol, corpus, frozen queries, candidates and predictions; full reproduction also requires those referenced artifacts and the evaluation notebook.
+
 ## API
 
 | Endpoint | Description |
@@ -253,8 +274,8 @@ Dockerfile   CPU image of the API
 - Classification and article embedding use a maximum sequence length of 256 tokens. Later text does not contribute directly to article retrieval, although `/ask` can select sentences from the full text of articles that were retrieved.
 - Training uses a class-weighted loss to address imbalance. Its effect was not isolated through an unweighted GreekBERT comparison.
 - `/ask` is extractive: it selects sentences from the retrieved articles and does not generate text. Some selected sentences can be scraping leftovers such as "read also" teasers.
-- Both retrieval evaluations use automatically generated, source-document queries, not independently written user questions. Notebook 08 includes full-text BM25, which can directly match the verbatim query in its source article; its perfect score does not generalize to real-world user queries. `/ask` answer quality has not been evaluated separately.
-- BM25 Full, BM25 Matched and Hybrid RRF have been benchmarked offline, but are not yet exposed through the API. The 256-token embedding limit still applies to the deployed dense retrieval index.
+- The retrieval evaluations use automatically generated, source-document queries, not independently written user questions. Notebook 08 includes full-text BM25, which can directly match the verbatim query in its source article; its perfect score does not generalize to real-world user queries. `/ask` answer quality has not been evaluated separately.
+- BM25 Full, BM25 Matched, Hybrid RRF and Top-5 Cross-Encoder reranking have been benchmarked offline, but are not yet exposed through the API. The 256-token embedding limit still applies to the deployed dense retrieval index.
 - `/ask` returns the highest-ranked candidate sentences without an answerability threshold. Ambiguous or unsupported questions may therefore return related but unhelpful evidence.
 - The article corpus is static and is not a live news feed. Retrieval scores are similarity scores, not calibrated probabilities of correctness.
 - The LLM benchmark is a single run per model on one dataset; see its own limitations above.
@@ -274,7 +295,8 @@ Dockerfile   CPU image of the API
 - [ ] Public live demo (attempted on Hugging Face Spaces, blocked by the free-tier CPU quota)
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article
 - [x] Offline BM25 Full / BM25 Matched / Dense E5 / Hybrid RRF benchmark with frozen queries and Recall@k / MRR@10 (Notebook 08)
-- [ ] Evaluate a reranker and independently authored, human-assessed queries; consider integrating hybrid retrieval into `/search` after testing
+- [x] Offline Top-5 Cross-Encoder reranking evaluation on 480 frozen queries (Notebook 09 evaluation)
+- [ ] Evaluate independently authored, human-assessed queries and integrate hybrid retrieval / reranking into `/search` after testing
 - [ ] Generative `/ask` with an open-source LLM, evaluated for faithfulness against the extractive version
 - [ ] Quantized LLM serving with streaming and evaluation regression tests in CI
 

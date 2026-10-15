@@ -1,0 +1,49 @@
+{
+  "candidate_sha256": "f95253f6fa83388e28880f40e21c2eac379d9b394ae412510ab1f199d7ccb057",
+  "hybrid_gold_rank": 1,
+  "hybrid_top5_ids": [
+    "macocu.el.8193211",
+    "macocu.el.14200070",
+    "macocu.el.10589312",
+    "macocu.el.276567",
+    "macocu.el.8061531"
+  ],
+  "inference_seconds": 36.82407738500024,
+  "model_id": "BAAI/bge-reranker-v2-m3",
+  "model_revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+  "outcome": "UNCHANGED",
+  "partition": "dev",
+  "protocol_sha256": "9778de1aab6e6d7a09c8359c41a5b07703b542ef6a8a761f3a051b1376c03750",
+  "query_id": "late_029",
+  "query_type": "late",
+  "rerank_top_k": 5,
+  "reranked_top5": [
+    {
+      "document_id": "macocu.el.8193211",
+      "hybrid_rank": 1,
+      "reranker_score": 0.9580323696136475
+    },
+    {
+      "document_id": "macocu.el.8061531",
+      "hybrid_rank": 5,
+      "reranker_score": 0.01051514595746994
+    },
+    {
+      "document_id": "macocu.el.276567",
+      "hybrid_rank": 4,
+      "reranker_score": 0.006393701769411564
+    },
+    {
+      "document_id": "macocu.el.10589312",
+      "hybrid_rank": 3,
+      "reranker_score": 0.002184634329751134
+    },
+    {
+      "document_id": "macocu.el.14200070",
+      "hybrid_rank": 2,
+      "reranker_score": 0.0012271292507648468
+    }
+  ],
+  "reranker_gold_rank": 1,
+  "source_id": "macocu.el.8193211"
+}

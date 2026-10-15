@@ -1,0 +1,60 @@
+{
+  "development": {
+    "baseline_recall_at_1": 0.6,
+    "baseline_recall_at_10": 0.9833333333333333,
+    "baseline_recall_at_5": 0.85,
+    "candidate_file": "dev_late_candidates.jsonl",
+    "candidate_sha256": "f95253f6fa83388e28880f40e21c2eac379d9b394ae412510ab1f199d7ccb057",
+    "maximum_possible_recall_at_1": 0.85,
+    "n_queries": 60,
+    "partition": "dev",
+    "query_type": "late"
+  },
+  "evaluation_plan": {
+    "execute_after_development": true,
+    "late_queries": 240,
+    "lead_queries": 240,
+    "use_for_hyperparameter_selection": false
+  },
+  "execution": {
+    "checkpointing": true,
+    "model_training": false,
+    "reuse_verified_pilot_results": true
+  },
+  "experiment": "cross_encoder_reranking_v1",
+  "limitations": [
+    "Synthetic source-article queries.",
+    "Single relevant source document per query.",
+    "Full-text BM25 has an exact-match advantage.",
+    "Top-5 reranking has an 85% development Recall@1 upper bound.",
+    "Cross-Encoder truncates pairs to 512 tokens.",
+    "59 of 60 development gold pairs exceed the 512-token limit.",
+    "CPU inference is comparatively expensive.",
+    "No evaluation queries used for model selection.",
+    "Pilot results do not establish generalization."
+  ],
+  "metrics": [
+    "recall@1",
+    "recall@5",
+    "recall@10",
+    "mrr@10"
+  ],
+  "model": {
+    "batch_size": 2,
+    "device": "cpu",
+    "id": "BAAI/bge-reranker-v2-m3",
+    "max_length": 512,
+    "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+  },
+  "retrieval": {
+    "baseline": "Hybrid RRF",
+    "bm25_candidate_k": 50,
+    "candidate_order": "Hybrid RRF rank",
+    "dense_candidate_k": 50,
+    "remaining_candidates": "Retain original Hybrid RRF ordering after the reranked Top-5",
+    "rerank_sort": "Descending Cross-Encoder score; tie-break by Hybrid rank and document ID",
+    "rerank_top_k": 5,
+    "rrf_k": 60
+  },
+  "status": "protocol_frozen"
+}
