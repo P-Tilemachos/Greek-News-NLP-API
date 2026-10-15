@@ -43,6 +43,15 @@ def get_retriever() -> SearchEngine:
 
 
 @lru_cache(maxsize=1)
+def get_hybrid_retriever() -> SearchEngine:
+    # Initialize BM25 lazily on the first opt-in hybrid /search request.
+    # Reuse the existing E5/FAISS retriever; do not change extractive /ask.
+    from greek_nlp.rag.hybrid import HybridRetriever
+
+    return HybridRetriever(get_retriever())
+
+
+@lru_cache(maxsize=1)
 def get_qa() -> QAEngine:
     from greek_nlp.rag.qa import ExtractiveQA
 
@@ -67,7 +76,11 @@ def search(
     request: SearchRequest,
     engine: Annotated[SearchEngine, Depends(get_retriever)],
 ) -> SearchResponse:
-    return SearchResponse(results=engine.search(request.query, request.k))
+    if request.mode == "hybrid":
+        results = get_hybrid_retriever().search(request.query, request.k)
+    else:
+        results = engine.search(request.query, request.k)
+    return SearchResponse(results=results, mode=request.mode)
 
 
 @app.post("/ask", response_model=AskResponse)

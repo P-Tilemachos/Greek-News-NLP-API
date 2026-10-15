@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml/badge.svg)
 
-Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier and an [offline comparison of BM25, dense and hybrid retrieval](#hybrid-retrieval-benchmark-v2-notebook-08). The repository also provides a [controlled four-configuration Tesla T4 inference benchmark](#controlled-gpu-inference-benchmark-notebook-07) (Notebook 07). The hybrid retriever has not been integrated into the API.
+Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier and an [offline comparison of BM25, dense and hybrid retrieval](#hybrid-retrieval-benchmark-v2-notebook-08). The repository also provides a [controlled four-configuration Tesla T4 inference benchmark](#controlled-gpu-inference-benchmark-notebook-07) (Notebook 07). Hybrid search is now available as an opt-in `/search` mode; the default `/search` and `/ask` remain dense-only.
 
 ## Architecture
 
@@ -132,7 +132,7 @@ All four retrievers achieved Recall@10 = 1.0000 on the 240 lead queries. Across 
 
 **Findings and controls:** Hybrid RRF increased late-query Recall@10 from 0.5125 (Dense E5) to 0.9583, but did **not** outperform BM25 Full. A text-coverage audit found that 3,614/5,250 articles (68.84%) were shortened in the matched-text view; all 300 lead queries, and none of the 300 late queries, were fully contained in their matched prefixes. This is a **full-query containment** check, not a claim that every token of every late query lies outside the dense index.
 
-**Interpretation and limitations:** The queries are verbatim extracts from documents already in the searchable corpus. Full-text BM25 can therefore exploit exact text matches, explaining its perfect result on this dataset. These numbers measure retrieval of the *source article*, not relevance to independently written user questions, semantic generalization or answer quality; no human-judged relevance labels were collected. Matched BM25 aligns approximate text coverage, not the lexical and E5 representations. No reranker or controlled inference latency/VRAM comparison was evaluated here. **The API's `/search` and `/ask` endpoints still use the existing dense retriever, not this hybrid experiment.**
+**Interpretation and limitations:** The queries are verbatim extracts from documents already in the searchable corpus. Full-text BM25 can therefore exploit exact text matches, explaining its perfect result on this dataset. These numbers measure retrieval of the *source article*, not relevance to independently written user questions, semantic generalization or answer quality; no human-judged relevance labels were collected. Matched BM25 aligns approximate text coverage, not the lexical and E5 representations. No reranker or controlled inference latency/VRAM comparison was evaluated here. **The archived evaluation predates Phase 11: hybrid search is now available as an opt-in `/search` mode, while the default `/search` and `/ask` remain dense-only.**
 
 **Reproducible artifacts:** [`08_hybrid_retrieval.ipynb`](notebooks/08_hybrid_retrieval.ipynb), [frozen queries](results/retrieval_eval_v2/queries.jsonl), [query manifest](results/retrieval_eval_v2/manifest.json), [per-query results](results/retrieval_eval_v2/evaluation_predictions.csv), [final metrics](results/retrieval_eval_v2/evaluation_metrics.csv) and [evaluation manifest](results/retrieval_eval_v2/evaluation_manifest.json). The manifests include query/source hashes, index provenance, settings, recorded software versions and known limitations.
 
@@ -153,9 +153,28 @@ On late queries, reranking increased Recall@1 by **21.25 percentage points** and
 
 The recorded mean Cross-Encoder inference time was **27.62 seconds per query** across the checkpointed CPU runs. This excludes model loading and Hybrid retrieval, spans resumed sessions and is not a controlled hardware comparison or end-to-end API latency. At this measured speed, the quality improvement has a substantial serving cost.
 
-Queries are verbatim source-article excerpts, and the gold target is the originating article rather than independently judged relevance. Full-text BM25 benefits from exact matches; input truncation also limits the reranker. These results do not establish performance on real user questions or generated-answer faithfulness. **Hybrid retrieval and reranking remain offline experiments; the API still uses Dense E5.**
+Queries are verbatim source-article excerpts, and the gold target is the originating article rather than independently judged relevance. Full-text BM25 benefits from exact matches; input truncation also limits the reranker. These results do not establish performance on real user questions or generated-answer faithfulness. **This reranking is still offline-only. Since Phase 11, BM25 Full + Dense E5 fusion is available as an opt-in `/search` mode, while default `/search` and `/ask` remain dense-only.**
 
 Saved outputs: [per-query ranks](results/reranking_eval_v1/frozen_eval_v1/evaluation_query_results_480.csv), [metrics](results/reranking_eval_v1/frozen_eval_v1/evaluation_metrics_480.csv), and [final report](results/reranking_eval_v1/frozen_eval_v1/evaluation_final_report_480.json). The report records the model revision and hashes of the protocol, corpus, frozen queries, candidates and predictions; full reproduction also requires those referenced artifacts and the evaluation notebook.
+
+## Hybrid Search API Integration (Phase 11)
+
+**Opt-in hybrid mode is available in `/search`.** A request with `"mode": "hybrid"` combines
+BM25 Full over article texts and the existing Dense E5/FAISS retriever using rank-only
+Reciprocal Rank Fusion (Top 50 per retriever, RRF constant 60). The default remains
+`"mode": "dense"` to preserve the existing API behaviour; `/ask` still uses dense retrieval.
+This integration reuses Notebook 08's approach but is **not a new independently evaluated
+benchmark** and does not include Cross-Encoder reranking (planned for Phase 12).
+
+```json
+{"query": "πλημμύρες και αποζημιώσεις αγροτών", "k": 5, "mode": "hybrid"}
+```
+
+The [one-cell validation notebook](notebooks/11_hybrid_retrieval_integration.ipynb) runs all Phase 11
+unit/API and CI-style checks without downloading model artifacts.
+
+See [Phase 11 — integration and validation](docs/phase_11_hybrid_integration.md) for setup,
+compatibility, caveats and rollback instructions.
 
 ## Extractive QA evaluation (Notebook 10)
 
@@ -189,7 +208,7 @@ See the [QA evaluation report](docs/qa_evaluation.md) and the [reproducibility a
 |---|---|
 | `GET /health` | API liveness check; does not verify model or index readiness |
 | `POST /classify` | Top-k predicted categories with scores for a Greek text |
-| `POST /search` | Semantic search over the article index, returns the top-k articles |
+| `POST /search` | Dense E5/FAISS by default; optional BM25 + Dense E5 Hybrid RRF with `mode: "hybrid"` |
 | `POST /ask` | Extractive question answering: the most relevant sentences with article ids, plus the source articles |
 
 Example `/classify` request:
@@ -202,6 +221,11 @@ Example `/classify` request:
 ```
 
 Interactive documentation (Swagger) is available at `/docs` when the server is running.
+
+To use hybrid search, call `POST /search` with `"mode": "hybrid"` alongside `query` and `k`.
+Omitting `mode` keeps the prior dense-only behavior. The optional hybrid implementation
+uses `rank-bm25==0.2.2`, included in the `[ml]` extra. See the
+[Phase 11 integration guide](docs/phase_11_hybrid_integration.md).
 
 ## Demo
 
@@ -303,10 +327,10 @@ src/greek_nlp/
   api/       FastAPI app and request/response schemas
   core/      model and index download from the Hugging Face Hub
   models/    GreekBERT inference
-  rag/       embedding retriever (FAISS) and extractive QA
-notebooks/   01–06 classification/retrieval/LLM experiments, 07 completed GPU inference benchmark, 08 hybrid retrieval, 09 cross-encoder, 10 public QA evaluation
+  rag/       Dense FAISS + opt-in BM25/E5 Hybrid RRF and extractive QA
+notebooks/   01–10 experiments + 11 one-cell Hybrid Retrieval integration validation
 results/     classification benchmarks, GreekBERT audit, GPU inference benchmark, retrieval/reranking evaluations and published QA aggregates (some retrieval queries contain article excerpts)
-docs/        screenshots, project plan and QA evaluation report
+docs/        screenshots, project plan, QA evaluation report and Phase 11 integration guide
 tests/       pytest suite (models are mocked, so CI needs no weights)
 Dockerfile   CPU image of the API
 ```
@@ -324,7 +348,7 @@ Dockerfile   CPU image of the API
 - Training uses a class-weighted loss to address imbalance. Its effect was not isolated through an unweighted GreekBERT comparison.
 - `/ask` is extractive: it selects sentences from the retrieved articles and does not generate text. Some selected sentences can be scraping leftovers such as "read also" teasers.
 - The synthetic retrieval evaluations (Notebooks 04, 08 and 09) use automatically generated, source-document queries, not independently written user questions. Notebook 08 includes full-text BM25, which can directly match verbatim queries in their source articles; its perfect score does not generalize to real-world user queries. Notebook 10 separately evaluates extractive `/ask` on 40 answerable questions from 32 articles, measuring source retrieval and evidence selection, with semantic review of 15 flagged cases. These results do not establish overall answer accuracy or performance on unanswerable questions.
-- BM25 Full, BM25 Matched, Hybrid RRF and Top-5 Cross-Encoder reranking have been benchmarked offline, but are not yet exposed through the API. The 256-token embedding limit still applies to the deployed dense retrieval index.
+- BM25 Full + Dense E5 Hybrid RRF is now available in `/search` as opt-in `mode: "hybrid"`. Matched BM25 and Cross-Encoder reranking remain offline-only; `/ask` and the default `/search` mode still use Dense E5. The 256-token embedding limit still applies to the deployed dense retrieval index.
 - `/ask` returns the highest-ranked candidate sentences without an answerability threshold. Ambiguous or unsupported questions may therefore return related but unhelpful evidence.
 - The article corpus is static and is not a live news feed. Retrieval scores are similarity scores, not calibrated probabilities of correctness.
 - The LLM benchmark is a single run per model on one dataset; see its own limitations above.
@@ -347,22 +371,15 @@ Dockerfile   CPU image of the API
 - [x] Offline BM25 Full / BM25 Matched / Dense E5 / Hybrid RRF benchmark with frozen queries and Recall@k / MRR@10 (Notebook 08)
 - [x] Offline Top-5 Cross-Encoder reranking evaluation on 480 frozen queries (Notebook 09 evaluation)
 - [x] Extractive `/ask` QA benchmark on 40 answerable questions from 32 articles, with frozen evaluation, evidence metrics, and flagged-case semantic review (Notebook 10)
-- [ ] Evaluate independently authored, human-assessed queries and integrate hybrid retrieval / reranking into `/search` after testing
-- [ ] Generative `/ask` with an open-source LLM, evaluated for faithfulness against the extractive version
-- [ ] Quantized LLM serving with streaming and evaluation regression tests in CI
+- [x] Phase 11: integrate BM25 Full + Dense E5 Hybrid RRF as an opt-in `/search` mode, with unit/API tests and fallback to existing dense retrieval
+- [ ] Phase 12: integrate Cross-Encoder reranking into `/search` with latency and regression testing
+- [ ] Evaluate independently authored, human-assessed queries; validate retrieval relevance before enabling hybrid as the default
+- [ ] Phase 13: integrate an open-source LLM with a reproducible inference interface
+- [ ] Phase 14: implement grounded generative RAG `/ask` with source citations and abstention support
+- [ ] Phase 15: evaluate faithfulness, hallucinations, answerability and independent human-assessed QA
+- [ ] Phase 16: optimize quantization, streaming and inference performance with controlled comparisons
+- [ ] Phase 17: complete end-to-end API tests, documentation, regression CI and v2 release checks
 
-
-### Proposed LLM/RAG extension (phases 11–17; not yet implemented)
-
-The following are planned development phases rather than features already available in the API. The deployed `/search` and extractive `/ask` endpoints currently use Dense E5 retrieval; Hybrid RRF and Cross-Encoder reranking remain offline evaluations.
-
-- [ ] **11 — Hybrid Retrieval Integration:** integrate and test BM25 + Dense E5 + RRF in the serving pipeline.
-- [ ] **12 — Cross-Encoder Integration:** add configurable reranking and evaluate serving latency and relevance.
-- [ ] **13 — Open-Source LLM Integration:** load and serve a suitable LLM with explicit hardware and licensing constraints.
-- [ ] **14 — Grounded Generative QA:** generate Greek answers from retrieved evidence with traceable citations and abstention behavior.
-- [ ] **15 — QA, Faithfulness and Hallucination Evaluation:** assess supported and unanswerable questions with independently reviewed evidence and regression sets.
-- [ ] **16 — Quantization and Performance Optimization:** benchmark quality/latency/VRAM trade-offs and evaluate practical serving options.
-- [ ] **17 — End-to-End API, Tests and Documentation:** validate the integrated pipeline, tests, reproducibility and release documentation.
 
 ## License
 

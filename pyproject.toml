@@ -13,8 +13,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx", "ruff", "pre-commit"]
-ml = ["torch", "transformers", "sentence-transformers", "faiss-cpu", "huggingface-hub"]
+dev = ["pytest", "httpx", "ruff", "pre-commit", "rank-bm25==0.2.2"]
+ml = ["torch", "transformers", "sentence-transformers", "faiss-cpu", "huggingface-hub", "rank-bm25==0.2.2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
