@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml/badge.svg)
 
-Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier and an [offline comparison of BM25, dense and hybrid retrieval](#hybrid-retrieval-benchmark-v2-notebook-08). The hybrid retriever has not been integrated into the API.
+Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier and an [offline comparison of BM25, dense and hybrid retrieval](#hybrid-retrieval-benchmark-v2-notebook-08). The repository also provides a [controlled four-configuration Tesla T4 inference benchmark](#controlled-gpu-inference-benchmark-notebook-07) (Notebook 07). The hybrid retriever has not been integrated into the API.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ GreekBERT was re-evaluated on the same test articles as the LLMs, using `text_cl
 ### Findings
 
 - **The tested QLoRA configuration improved classification.** It lifted the 1.5B model by about 29 percentage points in both accuracy and macro-F1 and beat the 3B zero-shot configuration. Prompt format, article length and precision also differ, so this is not an isolated ablation of fine-tuning alone.
-- **GreekBERT achieved the highest classification scores in this comparison.** Its historical timing and memory measurements were also lower, but a controlled performance comparison is still needed. The experiment does not isolate why it outperforms QLoRA.
+- **GreekBERT achieved the highest classification scores in this comparison.** The historical batch-8 speed and memory measurements above are not directly comparable across models. A separate batch-1 [GPU inference benchmark](#controlled-gpu-inference-benchmark-notebook-07) reports measured timing and allocated VRAM; it does not isolate the reason for GreekBERT’s classification advantage.
 - **The tested few-shot setup did not improve validation accuracy** (0.485 vs 0.510 zero-shot). It used one training example per class and about 7,000 prompt tokens per article. Few-shot was not evaluated in the final test comparison; this result does not establish that other example selections or prompting strategies would fail.
 - **Output format matters for small LLMs.** Asking for a letter (A to Q) collapsed to a single answer (validation accuracy 0.056). Scoring the first token of each label name worked. Scoring full label strings gave no gain on a 200-article validation subset and was roughly an order of magnitude slower.
 - **Weak classes.** The QLoRA model is weakest on `conflict, war and peace` (validation F1 0.40 vs 0.67 for GreekBERT) and `lifestyle and leisure` (0.18 vs 0.43, but only 8 validation examples, too few for a reliable estimate).
@@ -73,6 +73,25 @@ GreekBERT was re-evaluated on the same test articles as the LLMs, using `text_cl
 ### Limitations of the benchmark
 
 One dataset, one run per model, no QLoRA hyperparameter search, and no fine-tuned 3B model. Labels were assigned automatically by GPT-4o (see [Limitations](#limitations)), so the metrics measure agreement with those labels. The initial test-subset smoke experiment, differing input budgets and measurement protocols limit the comparison. Bootstrap intervals do not measure variability across training seeds. Dependencies and model revisions were not pinned. TF-IDF remains a historical baseline and is not included in the four-model paired bootstrap comparison. A cost-per-1,000-requests estimate has not been produced. The conclusions apply to these configurations and this dataset, not to LLMs in general.
+
+## Controlled GPU Inference Benchmark (Notebook 07)
+
+A separate, saved-protocol **single-request GPU inference benchmark** measured four classification configurations on **64 fixed Greek validation articles**, with **3 warm-up articles**, **batch size 1**, and an **NVIDIA Tesla T4**. The same article IDs were used for all four configurations. Each model had one measured run; checkpoint loading and training were excluded. Previously completed runs were verified from saved artifacts rather than repeated.
+
+| Configuration | Mean forward (ms) | Mean end-to-end (ms) | P95 end-to-end (ms) | Peak allocated VRAM (MiB) |
+|---|---:|---:|---:|---:|
+| **GreekBERT (FP32)** | **33.393** | **42.679** | **59.021** | **448.70** |
+| Qwen2.5-1.5B zero-shot (FP16) | 273.456 | 277.076 | 352.203 | 3189.26 |
+| Qwen2.5-3B zero-shot (FP16) | 503.219 | 510.485 | 649.135 | 6307.31 |
+| Qwen2.5-1.5B QLoRA (4-bit NF4; FP16 compute) | 299.936 | 303.439 | 422.657 | 1369.13 |
+
+**Inference configurations:** GreekBERT uses up to 256 tokens; both zero-shot Qwen models use up to 1,200 article characters and first-token scoring over 17 class labels; the QLoRA epoch-2 adapter uses up to 800 article characters and a documented fixed first-token classification prompt. Equivalence of the QLoRA inference prompt to the original training/evaluation prompt has **not** been established.
+
+**Interpretation:** Under these specific configurations, GreekBERT had the lowest recorded mean latency and PyTorch allocated VRAM. QLoRA NF4 used less allocated VRAM than Qwen2.5-1.5B FP16 zero-shot but had a higher mean end-to-end latency. Because input budgets, precision and prompts differ, these results are **configuration measurements, not matched-input ablation studies** or proof that quantization alone caused the observed changes. Peak PyTorch allocated VRAM does not capture all GPU memory consumption.
+
+**Scope and limitations:** Results comprise one run per model on 64 validation articles and one GPU type. The measured end-to-end time is an **inference workflow timing, not HTTP API latency**; it does not measure autoregressive text generation, model accuracy or answer faithfulness. The identity of the GreekBERT checkpoint relative to the historical deployed API checkpoint is still unresolved. See the recorded protocol, manifests and reports for additional caveats.
+
+**Notebook and saved artifacts:** [Notebook 07](notebooks/07_inference_benchmark.ipynb), [frozen protocol](results/inference_benchmark/protocol.json), [final comparison (CSV)](results/inference_benchmark/benchmark_comparison_final.csv), [final report](results/inference_benchmark/benchmark_report_final.md), and [all timing CSVs / per-model manifests](results/inference_benchmark/). The reports retain the partial comparison alongside the finalized four-model results. The frozen validation and adapter SHA-256 hashes are documented in the final report; the original private model weights and input articles are not included in the repository.
 
 ## Retrieval evaluation
 
@@ -269,12 +288,13 @@ CI runs on pushes to `main` and pull requests. Separate jobs run lint, formattin
 7. Run `04_retrieval_eval.ipynb` to evaluate retrieval. The index folder can be uploaded to a Hugging Face **dataset** repository and used through `HF_INDEX_REPO`.
 8. Run `05_llm_benchmark.ipynb` in a GPU-enabled Colab environment (a T4 was used for the historical run). It reads the split files and the fine-tuned classifier from Google Drive paths that need to be adapted, and installs `transformers`, `peft` and `bitsandbytes`. The QLoRA adapters are not stored in this repository; the resulting metrics and predictions are in `results/`.
 9. Use `06_greekbert_audit.ipynb` to inspect the saved checkpoint/tokenizer and compare GreekBERT preprocessing choices; see `results/greekbert_audit/` for its recorded outputs. It does not reproduce the historical training run.
-10. Use `08_hybrid_retrieval.ipynb` in Colab **on CPU** with the three split JSONL files available under its configured Google Drive `DATA_DIR`. The notebook downloads the public FAISS index from the Hugging Face **dataset** repo, builds BM25 indexes, generates the frozen development/evaluation queries and compares the retrievers. Existing benchmark-v2 artifacts are in `results/retrieval_eval_v2/`. To rerun without overwriting existing frozen files, preserve the saved query set and manifest. No GPU, paid service or LLM API key is required for the Notebook 08 workflow.
+10. Inspect `07_inference_benchmark.ipynb` and the frozen artifacts in `results/inference_benchmark/`. The four Tesla T4 single-request benchmark runs have already been completed and recorded; **do not rerun them solely to verify the saved results or overwrite their artifacts**. Repeating model inference requires the correct checkpoints (including the QLoRA adapter), 64 fixed validation articles, configured Google Drive paths and a compatible GPU. The included report/manifests document the protocol and verification; the original model weights and validation texts are not included here.
+11. Use `08_hybrid_retrieval.ipynb` in Colab **on CPU** with the three split JSONL files available under its configured Google Drive `DATA_DIR`. The notebook downloads the public FAISS index from the Hugging Face **dataset** repo, builds BM25 indexes, generates the frozen development/evaluation queries and compares the retrievers. Existing benchmark-v2 artifacts are in `results/retrieval_eval_v2/`. To rerun without overwriting existing frozen files, preserve the saved query set and manifest. No GPU, paid service or LLM API key is required for the Notebook 08 workflow.
 
-11. Review `09_cross_encoder_reranking.ipynb` and the saved offline evaluation in `results/reranking_eval_v1/frozen_eval_v1/`. Reproducing the original rankings requires the underlying frozen candidates, queries and model revision documented in the experiment report; this is not the deployed API retriever.
-12. Run the public `10_qa_evaluation.ipynb` to verify the published **aggregate** answerable-QA metrics in `results/qa_evaluation_v1/`. This public notebook does not rerun `/ask` inference or include the private questions, reference evidence and predictions required for the complete evaluation. See [`docs/qa_evaluation.md`](docs/qa_evaluation.md) for interpretation and limitations.
+12. Review `09_cross_encoder_reranking.ipynb` and the saved offline evaluation in `results/reranking_eval_v1/frozen_eval_v1/`. Reproducing the original rankings requires the underlying frozen candidates, queries and model revision documented in the experiment report; this is not the deployed API retriever.
+13. Run the public `10_qa_evaluation.ipynb` to verify the published **aggregate** answerable-QA metrics in `results/qa_evaluation_v1/`. This public notebook does not rerun `/ask` inference or include the private questions, reference evidence and predictions required for the complete evaluation. See [`docs/qa_evaluation.md`](docs/qa_evaluation.md) for interpretation and limitations.
 
-Dependencies are not globally locked to exact versions. Library versions and hardware can affect reproducibility; the reported metrics are the saved outputs of the included notebooks. Notebook 08 records the software versions used for its evaluation in `results/retrieval_eval_v2/evaluation_manifest.json`. The separate GPU inference benchmark (`07_inference_benchmark.ipynb`) is **not completed**.
+Dependencies are not globally locked to exact versions. Library versions and hardware can affect reproducibility; the reported metrics are the saved outputs of the included notebooks. Notebook 07 now has a completed four-model GPU benchmark with saved protocol, timing files, manifests and a final report under `results/inference_benchmark/`. Notebook 08 records the software versions used for its retrieval evaluation in `results/retrieval_eval_v2/evaluation_manifest.json`. Not all experiments can be reproduced in full from the public repository alone because some original inputs, adapters or evaluation references remain private.
 
 ## Project structure
 
@@ -284,8 +304,8 @@ src/greek_nlp/
   core/      model and index download from the Hugging Face Hub
   models/    GreekBERT inference
   rag/       embedding retriever (FAISS) and extractive QA
-notebooks/   01–06 classification/retrieval/LLM experiments, 08 hybrid retrieval, 09 cross-encoder, 10 public QA evaluation (07 GPU inference remains pending)
-results/     classification benchmarks, GreekBERT audit, retrieval/reranking evaluations and published QA aggregates (some retrieval queries contain article excerpts)
+notebooks/   01–06 classification/retrieval/LLM experiments, 07 completed GPU inference benchmark, 08 hybrid retrieval, 09 cross-encoder, 10 public QA evaluation
+results/     classification benchmarks, GreekBERT audit, GPU inference benchmark, retrieval/reranking evaluations and published QA aggregates (some retrieval queries contain article excerpts)
 docs/        screenshots, project plan and QA evaluation report
 tests/       pytest suite (models are mocked, so CI needs no weights)
 Dockerfile   CPU image of the API
@@ -320,7 +340,8 @@ Dockerfile   CPU image of the API
 - [x] Dockerfile and Docker build check in CI
 - [x] Model card on the Hugging Face Hub
 - [x] Initial LLM benchmark: zero-shot and QLoRA vs GreekBERT on test with bootstrap confidence intervals; few-shot experiments on validation
-- [ ] Benchmark follow-up: standardize performance measurements, reconcile GreekBERT results and improve training reproducibility
+- [x] Controlled four-configuration Tesla T4 GPU inference benchmark (Notebook 07): 64 fixed validation articles, batch-1 latency, P95 and allocated VRAM, with frozen artifacts and a final report
+- [ ] Benchmark follow-up: reconcile historical GreekBERT checkpoint/results, standardize future matched-input comparisons and improve training reproducibility
 - [ ] Public live demo (attempted on Hugging Face Spaces, blocked by the free-tier CPU quota)
 - [ ] Chunked retrieval (overlapping passages) to index the full text of each article
 - [x] Offline BM25 Full / BM25 Matched / Dense E5 / Hybrid RRF benchmark with frozen queries and Recall@k / MRR@10 (Notebook 08)
@@ -329,6 +350,19 @@ Dockerfile   CPU image of the API
 - [ ] Evaluate independently authored, human-assessed queries and integrate hybrid retrieval / reranking into `/search` after testing
 - [ ] Generative `/ask` with an open-source LLM, evaluated for faithfulness against the extractive version
 - [ ] Quantized LLM serving with streaming and evaluation regression tests in CI
+
+
+### Proposed LLM/RAG extension (phases 11–17; not yet implemented)
+
+The following are planned development phases rather than features already available in the API. The deployed `/search` and extractive `/ask` endpoints currently use Dense E5 retrieval; Hybrid RRF and Cross-Encoder reranking remain offline evaluations.
+
+- [ ] **11 — Hybrid Retrieval Integration:** integrate and test BM25 + Dense E5 + RRF in the serving pipeline.
+- [ ] **12 — Cross-Encoder Integration:** add configurable reranking and evaluate serving latency and relevance.
+- [ ] **13 — Open-Source LLM Integration:** load and serve a suitable LLM with explicit hardware and licensing constraints.
+- [ ] **14 — Grounded Generative QA:** generate Greek answers from retrieved evidence with traceable citations and abstention behavior.
+- [ ] **15 — QA, Faithfulness and Hallucination Evaluation:** assess supported and unanswerable questions with independently reviewed evidence and regression sets.
+- [ ] **16 — Quantization and Performance Optimization:** benchmark quality/latency/VRAM trade-offs and evaluate practical serving options.
+- [ ] **17 — End-to-End API, Tests and Documentation:** validate the integrated pipeline, tests, reproducibility and release documentation.
 
 ## License
 
