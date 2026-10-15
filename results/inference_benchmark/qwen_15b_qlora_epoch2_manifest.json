@@ -1,0 +1,131 @@
+{
+  "benchmark": "controlled_inference_benchmark_v1",
+  "checkpoint": {
+    "adapter_config": "adapter_config.json",
+    "adapter_weights_sha256": "b9591ad53c483209a387cecba8ea793516601660032e4c800b0de9ebfc6e56ab",
+    "adapter_weights_size_bytes": 73911112
+  },
+  "dataset": {
+    "batch_size": 1,
+    "measured_articles": 64,
+    "seed": 42,
+    "sha256": "d124de2fa8273aed325b80cb30f78adf677c876cee32797a4ca112929dfe22fb",
+    "split": "validation",
+    "warmup_articles": 3
+  },
+  "end_to_end_latency_ms": {
+    "max_ms": 479.5746339999596,
+    "mean_ms": 303.43892760937587,
+    "median_ms": 298.44273850000036,
+    "min_ms": 200.49481000000924,
+    "p90_ms": 382.8736391999769,
+    "p95_ms": 422.6565549000155
+  },
+  "forward_latency_ms": {
+    "max_ms": 467.4906000000192,
+    "mean_ms": 299.93609729687165,
+    "median_ms": 295.81394600000976,
+    "min_ms": 198.34314499996708,
+    "p90_ms": 374.2245333000142,
+    "p95_ms": 410.3240429999572
+  },
+  "gpu_memory_mib": {
+    "additional_peak": 131.66552734375,
+    "baseline_allocated": 1237.46728515625,
+    "peak_allocated": 1369.1328125,
+    "peak_reserved": 1540.0
+  },
+  "hardware": {
+    "cuda_version": "13.0",
+    "gpu": "Tesla T4",
+    "total_vram_gib": 14.56317138671875
+  },
+  "inference": {
+    "autoregressive_generation": false,
+    "chat_template": true,
+    "first_token_ids": [
+      7038,
+      6135,
+      84354,
+      4243,
+      68,
+      36738,
+      23294,
+      12120,
+      25312,
+      14380,
+      75,
+      9896,
+      3748,
+      39557,
+      82,
+      60901,
+      15206
+    ],
+    "labels": [
+      "arts, culture, entertainment and media",
+      "conflict, war and peace",
+      "crime, law and justice",
+      "disaster, accident and emergency incident",
+      "economy, business and finance",
+      "education",
+      "environment",
+      "health",
+      "human interest",
+      "labour",
+      "lifestyle and leisure",
+      "politics",
+      "religion",
+      "science and technology",
+      "society",
+      "sport",
+      "weather"
+    ],
+    "logits_to_keep": 1,
+    "max_article_characters": 800,
+    "mode": "qlora_nf4_first_token_classification",
+    "prompt": "17 label names; classify news article and answer with topic name only",
+    "quantization": "bnb NF4, compute fp16, double_quant=False"
+  },
+  "input_statistics": {
+    "max_prompt_tokens": 847,
+    "mean_article_chars_used": 760.59375,
+    "mean_prompt_tokens": 782.75
+  },
+  "limitations": [
+    "One GPU session, 64 articles, no repeat-session confidence intervals.",
+    "Uses a fixed 17-label first-token prompt, not free text generation.",
+    "Input limited to 800 article characters.",
+    "Inferred prompt need not reproduce original QLoRA training/evaluation prompt exactly.",
+    "Other models use different input limits, architectures and precision.",
+    "Not measured over the production HTTP API."
+  ],
+  "model": {
+    "architecture": "PeftModelForCausalLM",
+    "device": "cuda:0",
+    "dtype": "NF4 storage; FP16 compute",
+    "name": "Qwen/Qwen2.5-1.5B-Instruct + QLoRA epoch 2",
+    "revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
+  },
+  "results": {
+    "timings_file": "qwen_15b_qlora_epoch2_timings.csv",
+    "timings_sha256": "d7f62c9c1f231bc68ac9e16bca1cb56c2f9d0d5bc38524466e17833b726b5bdc"
+  },
+  "software_versions": {
+    "accelerate": "1.15.0",
+    "bitsandbytes": "0.50.2",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "peft": "0.21.1",
+    "python": "3.13.15",
+    "safetensors": "0.8.0",
+    "torch": "2.11.0+cu130",
+    "transformers": "5.18.0"
+  },
+  "timing_protocol": {
+    "cuda_synchronization": true,
+    "end_to_end_scope": "prompt + tokenization + transfer + forward + prediction",
+    "forward_scope": "synchronized single forward pass",
+    "model_loading_excluded": true
+  }
+}

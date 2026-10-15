@@ -1,0 +1,88 @@
+{
+  "benchmark": "controlled_inference_benchmark_v1",
+  "dataset": {
+    "batch_size": 1,
+    "dataset_sha256": "d124de2fa8273aed325b80cb30f78adf677c876cee32797a4ca112929dfe22fb",
+    "measured_articles": 64,
+    "seed": 42,
+    "split": "validation",
+    "warmup_articles": 3
+  },
+  "end_to_end_latency_ms": {
+    "max_ms": 82.87725000013779,
+    "mean_ms": 42.678534062503104,
+    "median_ms": 42.61525900005836,
+    "min_ms": 13.227017999952295,
+    "p90_ms": 54.01031020001028,
+    "p95_ms": 59.02097310001863
+  },
+  "forward_latency_ms": {
+    "max_ms": 61.6610980000587,
+    "mean_ms": 33.39276875000863,
+    "median_ms": 34.361936999971476,
+    "min_ms": 11.526317000061681,
+    "p90_ms": 44.09084060002897,
+    "p95_ms": 49.23295805001542
+  },
+  "gpu_memory_mib": {
+    "additional_peak": 8.255859375,
+    "baseline_allocated": 440.44384765625,
+    "peak_allocated": 448.69970703125,
+    "peak_reserved": 492.0
+  },
+  "hardware": {
+    "cuda_version": "13.0",
+    "device": "Tesla T4",
+    "total_vram_gib": 14.56317138671875
+  },
+  "input_statistics": {
+    "max_tokens": 256,
+    "mean_tokens": 211.125
+  },
+  "limitations": [
+    "Single GPU benchmark session.",
+    "Batch size 1 with 64 validation examples.",
+    "Model inputs limited to 256 tokens.",
+    "Timing includes explicit CUDA synchronization.",
+    "End-to-end latency is not production API latency.",
+    "Peak allocated VRAM measures PyTorch allocations.",
+    "Checkpoint identity with the historical training run has not been established.",
+    "Different model input budgets limit direct cross-model comparisons."
+  ],
+  "model": {
+    "checkpoint_directory": "/content/drive/MyDrive/greek-news-nlp/greek-bert-news-classifier",
+    "checkpoint_sha256": {
+      "config.json": "dc131db3492984196c23c6373743bcd6b6d4e33aae594ec26e874279de4e72fa",
+      "model.safetensors": "fe6f1d4a2f05f2dbce05bec6da76e05a317b68c2567c3977aa954c63bf7f49db",
+      "tokenizer.json": "e05d0c5c575bd892b8923c8b49630513a7c047bedd31a5f86658e151e381d65d",
+      "tokenizer_config.json": "9f0c2c65a70ea18113ffa2e717103e7210ea826e7acc3442b69b346686b55a48"
+    },
+    "dtype": "torch.float32",
+    "max_length": 256,
+    "model_type": "bert",
+    "name": "GreekBERT fine-tuned",
+    "num_labels": 17,
+    "preprocessing": "Unicode NFD, remove Mn, lowercase"
+  },
+  "results": {
+    "timings_file": "greekbert_timings.csv",
+    "timings_sha256": "bddd83ea1e86d43864585c7af1c767b43a64428494b2a2b2354d5460370130e5"
+  },
+  "software_versions": {
+    "accelerate": "1.15.0",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "python": "3.13.15",
+    "safetensors": "0.8.0",
+    "torch": "2.11.0+cu130",
+    "transformers": "5.18.0"
+  },
+  "timing_protocol": {
+    "batch_size": 1,
+    "cuda_synchronization": true,
+    "end_to_end_scope": "Preprocessing, tokenization, transfer, model forward, synchronization, and prediction extraction.",
+    "forward_scope": "Model forward invocation, synchronized before and after GPU execution.",
+    "model_loading_excluded": true,
+    "warmup": true
+  }
+}

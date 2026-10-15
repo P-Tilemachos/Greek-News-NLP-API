@@ -1,0 +1,128 @@
+{
+  "benchmark": "controlled_inference_benchmark_v1",
+  "dataset": {
+    "batch_size": 1,
+    "measured_articles": 64,
+    "seed": 42,
+    "sha256": "d124de2fa8273aed325b80cb30f78adf677c876cee32797a4ca112929dfe22fb",
+    "split": "validation",
+    "warmup_articles": 3
+  },
+  "end_to_end_latency_ms": {
+    "max_ms": 656.6079169997465,
+    "mean_ms": 510.484840843759,
+    "median_ms": 562.3831685002187,
+    "min_ms": 247.12023600022803,
+    "p90_ms": 642.8532597002231,
+    "p95_ms": 649.1348528999424
+  },
+  "forward_latency_ms": {
+    "max_ms": 647.2031460007202,
+    "mean_ms": 503.2192033750107,
+    "median_ms": 551.9198024999241,
+    "min_ms": 243.55302000003576,
+    "p90_ms": 635.0537680000343,
+    "p95_ms": 642.0777419997648
+  },
+  "gpu_memory_mib": {
+    "additional_peak": 303.7197265625,
+    "baseline_allocated": 6003.58740234375,
+    "peak_allocated": 6307.30712890625,
+    "peak_reserved": 6956.0
+  },
+  "hardware": {
+    "cuda_version": "13.0",
+    "gpu": "Tesla T4",
+    "total_vram_gib": 14.56317138671875
+  },
+  "inference": {
+    "autoregressive_generation": false,
+    "chat_template": true,
+    "first_token_ids": [
+      7038,
+      6135,
+      84354,
+      4243,
+      68,
+      36738,
+      23294,
+      12120,
+      25312,
+      14380,
+      75,
+      9896,
+      3748,
+      39557,
+      82,
+      60901,
+      15206
+    ],
+    "labels": [
+      "arts, culture, entertainment and media",
+      "conflict, war and peace",
+      "crime, law and justice",
+      "disaster, accident and emergency incident",
+      "economy, business and finance",
+      "education",
+      "environment",
+      "health",
+      "human interest",
+      "labour",
+      "lifestyle and leisure",
+      "politics",
+      "religion",
+      "science and technology",
+      "society",
+      "sport",
+      "weather"
+    ],
+    "logits_to_keep": 1,
+    "max_article_characters": 1200,
+    "mode": "zero_shot_first_token",
+    "prompt_source": "notebooks/05_llm_benchmark.ipynb"
+  },
+  "input_statistics": {
+    "max_prompt_tokens": 1193,
+    "mean_article_chars_used": 1002.140625,
+    "mean_prompt_tokens": 989.5625
+  },
+  "limitations": [
+    "Single GPU benchmark session.",
+    "64 validation articles, batch size 1.",
+    "Article truncated to 1200 characters.",
+    "First-token classification, not generation.",
+    "Not production API latency.",
+    "End-to-end timing includes CUDA synchronization.",
+    "VRAM is PyTorch allocated memory.",
+    "Cross-model input budgets differ."
+  ],
+  "model": {
+    "architecture": "Qwen2ForCausalLM",
+    "device": "cuda:0",
+    "dtype": "torch.float16",
+    "name": "Qwen/Qwen2.5-3B-Instruct",
+    "parameters": 3085938688,
+    "revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1"
+  },
+  "results": {
+    "timings_file": "qwen_3b_zero_shot_timings.csv",
+    "timings_sha256": "4b42d5938d64800e5a61e91b9aa64d167c385d4ad2f19ffa2fd9eaa5bf4b946d"
+  },
+  "software_versions": {
+    "accelerate": "1.15.0",
+    "huggingface_hub": "1.33.0",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "python": "3.13.15",
+    "torch": "2.11.0+cu130",
+    "transformers": "5.18.0"
+  },
+  "timing_protocol": {
+    "batch_size": 1,
+    "cuda_synchronization": true,
+    "end_to_end_scope": "Prompt preparation, tokenization, GPU transfer, synchronized model forward and first-token prediction extraction.",
+    "forward_scope": "Synchronized model forward pass.",
+    "model_loading_excluded": true,
+    "warmup": true
+  }
+}
