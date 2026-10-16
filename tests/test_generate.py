@@ -1,9 +1,51 @@
 """Phase 13 API tests: no model files or outbound Hugging Face requests."""
 
+import sys
+from contextlib import nullcontext
+from types import ModuleType, SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
 
 from greek_nlp.api import main
 from greek_nlp.api.schemas import GenerateRequest
+
+
+@pytest.fixture
+def fake_torch(monkeypatch):
+    """Lightweight torch substitute: CI tests should not require ML dependencies."""
+
+    class FakeTensor:
+        def __init__(self, data):
+            self.data = data
+
+        @property
+        def shape(self):
+            if self.data and isinstance(self.data[0], list):
+                return (len(self.data), len(self.data[0]))
+            return (len(self.data),)
+
+        def to(self, device):
+            assert device == "cpu"
+            return self
+
+        def __getitem__(self, index):
+            return FakeTensor(self.data[index])
+
+        def __len__(self):
+            return len(self.data)
+
+        def tolist(self):
+            return self.data
+
+    torch = ModuleType("torch")
+    torch.cuda = SimpleNamespace(is_available=lambda: False)
+    torch.float16 = "float16"
+    torch.float32 = "float32"
+    torch.tensor = FakeTensor
+    torch.inference_mode = nullcontext
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    return torch
 
 
 class FakeGenerator:
@@ -99,13 +141,8 @@ def test_generate_schema_token_bounds():
     assert req.max_new_tokens == 64
 
 
-def test_local_generator_only_decodes_new_tokens(monkeypatch):
+def test_local_generator_only_decodes_new_tokens(monkeypatch, fake_torch):
     """Exercise the real LocalGenerator logic with tiny in-memory fakes."""
-    import sys
-    from types import SimpleNamespace
-
-    import torch
-
     from greek_nlp.llm.generator import LocalGenerator
 
     calls = {}
@@ -122,9 +159,10 @@ def test_local_generator_only_decodes_new_tokens(monkeypatch):
         def __call__(self, rendered, **kwargs):
             assert rendered == "FAKE CHAT PREFIX"
             assert kwargs["truncation"] and kwargs["max_length"] == 512
+            assert kwargs["add_special_tokens"] is False
             return {
-                "input_ids": torch.tensor([[10, 20, 30]]),
-                "attention_mask": torch.tensor([[1, 1, 1]]),
+                "input_ids": fake_torch.tensor([[10, 20, 30]]),
+                "attention_mask": fake_torch.tensor([[1, 1, 1]]),
             }
 
         def decode(self, generated, skip_special_tokens):
@@ -144,7 +182,7 @@ def test_local_generator_only_decodes_new_tokens(monkeypatch):
             assert kwargs["max_new_tokens"] == 2
             assert kwargs["do_sample"] is False
             assert kwargs["input_ids"].tolist() == [[10, 20, 30]]
-            return torch.tensor([[10, 20, 30, 101, 102]])
+            return fake_torch.tensor([[10, 20, 30, 101, 102]])
 
     class FakeTokenizerFactory:
         @staticmethod
@@ -156,7 +194,7 @@ def test_local_generator_only_decodes_new_tokens(monkeypatch):
     class FakeModelFactory:
         @staticmethod
         def from_pretrained(name, **kwargs):
-            assert kwargs["torch_dtype"] == torch.float32
+            assert kwargs["torch_dtype"] == fake_torch.float32
             assert kwargs["trust_remote_code"] is False
             return FakeModel()
 
@@ -184,14 +222,11 @@ def test_local_generator_only_decodes_new_tokens(monkeypatch):
     assert calls == {"eval": True, "decoded": [101, 102]}
 
 
-def test_cuda_request_does_not_silently_fall_back(monkeypatch):
-    import pytest
-    import torch
-
+def test_cuda_request_does_not_silently_fall_back(monkeypatch, fake_torch):
     from greek_nlp.llm.generator import LocalGenerator
 
     monkeypatch.setenv("LLM_DEVICE", "cuda")
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(fake_torch.cuda, "is_available", lambda: False)
 
     with pytest.raises(RuntimeError, match="CUDA was requested"):
         LocalGenerator()
