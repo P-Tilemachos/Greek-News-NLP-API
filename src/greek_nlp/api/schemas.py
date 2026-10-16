@@ -20,8 +20,11 @@ class ClassifyResponse(BaseModel):
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=3, max_length=500, description="Ερώτηση ή θέμα")
     k: int = Field(5, ge=1, le=20, description="Πόσα άρθρα να επιστραφούν")
-    mode: Literal["dense", "hybrid"] = Field(
-        "dense", description="dense (existing E5) or hybrid (BM25 Full + E5 + RRF)"
+    mode: Literal["dense", "hybrid", "rerank"] = Field(
+        "dense",
+        description=(
+            "dense (default), hybrid (BM25 + E5 + RRF), or rerank (Hybrid Top-5 + Cross-Encoder)"
+        ),
     )
 
 
@@ -34,7 +37,7 @@ class SearchHit(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[SearchHit]
-    mode: Literal["dense", "hybrid"] = "dense"
+    mode: Literal["dense", "hybrid", "rerank"] = "dense"
 
 
 class AskRequest(BaseModel):

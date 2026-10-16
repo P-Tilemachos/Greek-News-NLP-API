@@ -52,6 +52,14 @@ def get_hybrid_retriever() -> SearchEngine:
 
 
 @lru_cache(maxsize=1)
+def get_reranking_retriever() -> SearchEngine:
+    # Opt-in only. The heavy Cross-Encoder model is not loaded by /ask, dense or hybrid.
+    from greek_nlp.rag.reranker import RerankingRetriever
+
+    return RerankingRetriever(get_hybrid_retriever())
+
+
+@lru_cache(maxsize=1)
 def get_qa() -> QAEngine:
     from greek_nlp.rag.qa import ExtractiveQA
 
@@ -76,7 +84,9 @@ def search(
     request: SearchRequest,
     engine: Annotated[SearchEngine, Depends(get_retriever)],
 ) -> SearchResponse:
-    if request.mode == "hybrid":
+    if request.mode == "rerank":
+        results = get_reranking_retriever().search(request.query, request.k)
+    elif request.mode == "hybrid":
         results = get_hybrid_retriever().search(request.query, request.k)
     else:
         results = engine.search(request.query, request.k)
