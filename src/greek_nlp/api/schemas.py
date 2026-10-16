@@ -22,9 +22,7 @@ class SearchRequest(BaseModel):
     k: int = Field(5, ge=1, le=20, description="Πόσα άρθρα να επιστραφούν")
     mode: Literal["dense", "hybrid", "rerank"] = Field(
         "dense",
-        description=(
-            "dense (default), hybrid (BM25 + E5 + RRF), or rerank (Hybrid Top-5 + Cross-Encoder)"
-        ),
+        description="Search mode: dense (default), hybrid (BM25 + E5 + RRF), or rerank.",
     )
 
 
@@ -55,3 +53,21 @@ class AskResponse(BaseModel):
     mode: str
     evidence: list[Evidence]
     sources: list[SearchHit]
+
+
+class GenerateRequest(BaseModel):
+    prompt: str = Field(
+        ..., min_length=3, max_length=1500, description="Greek-language generation prompt"
+    )
+    max_new_tokens: int = Field(
+        64, ge=1, le=128, description="Strict output token budget (greedy decoding)"
+    )
+
+
+class GenerateResponse(BaseModel):
+    mode: Literal["local_llm"]
+    model: str
+    device: Literal["cpu", "cuda"]
+    generated_text: str
+    input_tokens: int = Field(ge=1)
+    output_tokens: int = Field(ge=0)

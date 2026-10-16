@@ -1,13 +1,16 @@
 from functools import lru_cache
+from threading import Lock
 from typing import Annotated, Protocol
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 
 from greek_nlp.api.schemas import (
     AskRequest,
     AskResponse,
     ClassifyRequest,
     ClassifyResponse,
+    GenerateRequest,
+    GenerateResponse,
     SearchRequest,
     SearchResponse,
 )
@@ -59,6 +62,22 @@ def get_reranking_retriever() -> SearchEngine:
     return RerankingRetriever(get_hybrid_retriever())
 
 
+_generator_init_lock = Lock()
+
+
+@lru_cache(maxsize=1)
+def _load_generator():
+    from greek_nlp.llm.generator import LocalGenerator
+
+    return LocalGenerator()
+
+
+def get_generator():
+    # Serialize the first model initialization; only POST /generate uses this.
+    with _generator_init_lock:
+        return _load_generator()
+
+
 @lru_cache(maxsize=1)
 def get_qa() -> QAEngine:
     from greek_nlp.rag.qa import ExtractiveQA
@@ -99,3 +118,17 @@ def ask(
     qa: Annotated[QAEngine, Depends(get_qa)],
 ) -> AskResponse:
     return AskResponse(**qa.ask(request.question, request.k))
+
+
+@app.post("/generate", response_model=GenerateResponse)
+def generate(request: GenerateRequest) -> GenerateResponse:
+    """Opt-in local LLM text completion, without retrieval or citations (Phase 13)."""
+    try:
+        output = get_generator().generate(request.prompt, request.max_new_tokens)
+    except (ImportError, OSError, RuntimeError, ValueError) as exc:
+        # Do not expose model cache paths, tokens, or internal stack traces to callers.
+        raise HTTPException(
+            status_code=503,
+            detail="Local LLM unavailable. Check optional dependencies, model access and memory.",
+        ) from exc
+    return GenerateResponse(**output)

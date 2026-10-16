@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml/badge.svg)
 
-Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier and an [offline comparison of BM25, dense and hybrid retrieval](#hybrid-retrieval-benchmark-v2-notebook-08). The repository also provides a [controlled four-configuration Tesla T4 inference benchmark](#controlled-gpu-inference-benchmark-notebook-07) (Notebook 07). Hybrid search and Cross-Encoder reranking are now available as opt-in `/search` modes; the default `/search` and `/ask` remain dense-only.
+Greek news classification and retrieval-based extractive question answering served through a REST API: a fine-tuned **GreekBERT** classifier (evaluated against a TF-IDF baseline), semantic search with multilingual-e5 and FAISS, and an extractive `/ask` endpoint that returns cited evidence sentences. Packaged with Docker and tested in CI. The repository also contains a [benchmark of open-source LLMs](#llm-benchmark) (zero-shot and QLoRA fine-tuned) against the GreekBERT classifier and an [offline comparison of BM25, dense and hybrid retrieval](#hybrid-retrieval-benchmark-v2-notebook-08). The repository also provides a [controlled four-configuration Tesla T4 inference benchmark](#controlled-gpu-inference-benchmark-notebook-07) (Notebook 07). Hybrid search and Cross-Encoder reranking are now available as opt-in `/search` modes; the default `/search` and `/ask` remain dense-only. Phase 13 adds an optional **local `/generate` endpoint** (separate from retrieval or grounded RAG).
 
 ## Architecture
 
@@ -16,10 +16,12 @@ flowchart LR
     CE --> HYB
     HYB --> RET
     API -->|/ask| QA[Extractive QA]
+    API -->|/generate| LLM[Local Open-Weight LLM]
     QA --> RET
     HUB[(Hugging Face Hub)] -. model and index .-> CLF
     HUB -. model and index .-> RET
     HUB -. reranker weights .-> CE
+    HUB -. optional LLM weights .-> LLM
 ```
 
 ## Results
@@ -232,6 +234,38 @@ The benchmark does not evaluate unanswerable questions or abstention.
 
 See the [QA evaluation report](docs/qa_evaluation.md) and the [reproducibility artifacts](results/qa_evaluation_v1/).
 
+## Local LLM Inference (Phase 13 — implementation prepared)
+
+An independent **opt-in `POST /generate`** endpoint supports local, greedy
+text generation with a public open-weight model. Default checkpoint:
+`Qwen/Qwen2.5-0.5B-Instruct` (change with the server-side `LLM_MODEL_ID`).
+The model is loaded on the **first** `/generate` request; it is not loaded
+when using `/health`, `/classify`, `/search` or the existing extractive `/ask`.
+CPU inference is supported; CUDA is optional. Inputs and output tokens are
+bounded, and offline tests do not download model weights.
+
+```json
+{
+  "prompt": "Γράψε μια σύντομη πρόταση στα ελληνικά για την ενημέρωση των πολιτών.",
+  "max_new_tokens": 32
+}
+```
+
+Install optional local generation dependencies with
+`python -m pip install -e ".[dev,llm]"` or use
+`scripts/run_phase13_checks.bat` (offline checks) followed by
+`scripts/install_phase13_llm.bat` (real inference dependencies).
+See the [Phase 13 guide](docs/phase_13_local_llm_integration.md) and
+[Notebook 13](notebooks/13_local_llm_integration.ipynb) for a **single-cell
+live smoke test** against the locally running API.
+
+**Scope warning:** `/generate` is **not** RAG or fact-checked QA. It does not
+retrieve articles, attach citations, use the classification QLoRA adapter,
+or verify generated statements. Grounded RAG and hallucination testing are
+separate future phases. CPU generation may be slow and initial model download
+requires network access. The Phase 13 integration is pending a real-model
+smoke test and green CI before being considered complete.
+
 ## API
 
 | Endpoint | Description |
@@ -240,6 +274,7 @@ See the [QA evaluation report](docs/qa_evaluation.md) and the [reproducibility a
 | `POST /classify` | Top-k predicted categories with scores for a Greek text |
 | `POST /search` | Dense E5/FAISS by default; opt-in `mode: "hybrid"` (BM25+E5+RRF) or `mode: "rerank"` (Hybrid+Cross-Encoder Top-5) |
 | `POST /ask` | Extractive question answering: the most relevant sentences with article ids, plus the source articles |
+| `POST /generate` | Optional ungrounded local text generation with a bounded open-source LLM (Phase 13) |
 
 Example `/classify` request:
 
@@ -385,6 +420,7 @@ Dockerfile   CPU image of the API
 - `/ask` returns the highest-ranked candidate sentences without an answerability threshold. Ambiguous or unsupported questions may therefore return related but unhelpful evidence.
 - The article corpus is static and is not a live news feed. Retrieval scores are similarity scores, not calibrated probabilities of correctness.
 - The LLM benchmark is a single run per model on one dataset; see its own limitations above.
+- The Phase 13 `/generate` prototype provides **ungrounded**, potentially inaccurate model output; it does not yet supply news citations, user authentication, rate limiting or a measured quality benchmark.
 
 ## Roadmap
 
@@ -407,7 +443,7 @@ Dockerfile   CPU image of the API
 - [x] Phase 11: integrate BM25 Full + Dense E5 Hybrid RRF as an opt-in `/search` mode, with unit/API tests and fallback to existing dense retrieval
 - [x] Phase 12: add opt-in Cross-Encoder Top-5 reranking to `/search`, with unit/API regression checks and a separate live smoke-test workflow (full performance benchmarking remains future work)
 - [ ] Evaluate independently authored, human-assessed queries; validate retrieval relevance before enabling hybrid as the default
-- [ ] Phase 13: integrate an open-source LLM with a reproducible inference interface
+- [ ] Phase 13: integrate local open-source LLM `/generate` with tests, bounded inference and live model validation (code prepared; live smoke and CI pending)
 - [ ] Phase 14: implement grounded generative RAG `/ask` with source citations and abstention support
 - [ ] Phase 15: evaluate faithfulness, hallucinations, answerability and independent human-assessed QA
 - [ ] Phase 16: optimize quantization, streaming and inference performance with controlled comparisons
