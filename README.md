@@ -443,7 +443,7 @@ Dockerfile   CPU image of the API
 - [x] Phase 11: integrate BM25 Full + Dense E5 Hybrid RRF as an opt-in `/search` mode, with unit/API tests and fallback to existing dense retrieval
 - [x] Phase 12: add opt-in Cross-Encoder Top-5 reranking to `/search`, with unit/API regression checks and a separate live smoke-test workflow (full performance benchmarking remains future work)
 - [ ] Evaluate independently authored, human-assessed queries; validate retrieval relevance before enabling hybrid as the default
-- [ ] Phase 13: integrate local open-source LLM `/generate` with tests, bounded inference and live model validation (code prepared; live smoke and CI pending)
+- [x] Phase 13: integrate local open-source LLM `/generate` with tests, bounded inference and live model validation (35 tests passed; CPU inference verified; GitHub CI #36 passing). Greek generation quality remains limited.
 - [ ] Phase 14: implement grounded generative RAG `/ask` with source citations and abstention support
 - [ ] Phase 15: evaluate faithfulness, hallucinations, answerability and independent human-assessed QA
 - [ ] Phase 16: optimize quantization, streaming and inference performance with controlled comparisons
