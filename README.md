@@ -198,20 +198,32 @@ Dockerfile   CPU image of the API
 
 The full list is in [docs/limitations.md](docs/limitations.md).
 
+
 ## Roadmap
 
-Done: data cleaning and splits, TF-IDF baseline, GreekBERT fine-tuning, `/classify`, dense `/search`, extractive `/ask`, Docker and CI, Hugging Face model card, LLM benchmark with bootstrap confidence intervals, controlled T4 inference benchmark, hybrid and reranked retrieval (offline evaluation and opt-in `/search` modes), extractive QA evaluation, `/generate`, and grounded `/rag/ask`.
+### Completed
 
-Planned:
+- [x] Data preprocessing, stratified splitting and TF-IDF baseline.
+- [x] GreekBERT fine-tuning, classification evaluation and `/classify` API.
+- [x] Dense semantic retrieval with multilingual-e5 and FAISS, and extractive `/ask`.
+- [x] Docker packaging, automated tests, GitHub Actions CI and Hugging Face model card.
+- [x] Open-source LLM benchmarking and controlled Tesla T4 inference evaluation.
+- [x] Offline BM25, Dense E5, Hybrid RRF and Cross-Encoder reranking evaluations.
+- [x] Extractive QA benchmark with 40 answerable questions (Notebook 10).
+- [x] Phase 11 — Opt-in hybrid retrieval integration into `/search`.
+- [x] Phase 12 — Opt-in Cross-Encoder reranking integration into `/search`.
+- [x] Phase 13 — Local open-source LLM generation through `/generate`.
+- [x] Phase 14 — Grounded generative RAG through `/rag/ask`, with source citations, evidence-based safe retry and abstention support. Offline tests and selected real-model smoke tests passed; comprehensive faithfulness evaluation remains pending.
 
-- [ ] Reconcile the historical GreekBERT checkpoint and results, and standardize matched-input comparisons
-- [ ] Public live demo
-- [ ] Chunked retrieval to index the full text of each article
-- [ ] Human-assessed queries to validate retrieval relevance before making hybrid the default
-- [ ] Faithfulness, hallucination and answerability evaluation for `/rag/ask`
-- [ ] Quantization, streaming and inference performance with controlled comparisons
-- [ ] End-to-end API tests, regression CI and v2 release checks
+### Planned Improvements
 
-## License
+- [ ] Reconcile historical GreekBERT checkpoints and results, and improve reproducibility of matched-input model comparisons.
+- [ ] Implement overlapping, passage-level chunking and indexing of full articles, with retrieval evaluation.
+- [ ] Evaluate retrieval relevance using independently authored, human-assessed queries before considering hybrid retrieval as the default.
+- [ ] Deploy a public live demo (previous Hugging Face Spaces attempt was limited by the free-tier CPU quota).
 
-The code is released under the MIT License (see `LICENSE`). The classifier is fine-tuned from [GreekBERT](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1) (MIT License, Copyright (c) 2020 NLP AUEB Group). The article texts in the index dataset are licensed under CC BY-SA 4.0 (see [Data](#data)). The LLM benchmark evaluates Qwen2.5 models (Alibaba Cloud), which are not redistributed here; see their model cards for license terms.
+### Upcoming Phases
+
+- [ ] Phase 15 — Evaluate RAG faithfulness, hallucinations, answerability, abstention behavior and independently human-assessed QA.
+- [ ] Phase 16 — Optimize quantization, streaming, latency, memory usage and inference performance through controlled comparisons.
+- [ ] Phase 17 — Expand end-to-end integration and regression tests, strengthen CI and documentation, and prepare v2 release validation.
