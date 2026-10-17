@@ -444,7 +444,7 @@ Dockerfile   CPU image of the API
 - [x] Phase 12: add opt-in Cross-Encoder Top-5 reranking to `/search`, with unit/API regression checks and a separate live smoke-test workflow (full performance benchmarking remains future work)
 - [ ] Evaluate independently authored, human-assessed queries; validate retrieval relevance before enabling hybrid as the default
 - [x] Phase 13: integrate local open-source LLM `/generate` with tests, bounded inference and live model validation (35 tests passed; CPU inference verified; GitHub CI #36 passing). Greek generation quality remains limited.
-- [ ] Phase 14: implement grounded generative RAG `/ask` with source citations and abstention support
+- [x] Phase 14: implement grounded generative RAG via `/rag/ask` with source citations, evidence-based safe retry and abstention support (62 tests passed; live CPU inference and source-cited answer verified). Full faithfulness evaluation remains Phase 15.
 - [ ] Phase 15: evaluate faithfulness, hallucinations, answerability and independent human-assessed QA
 - [ ] Phase 16: optimize quantization, streaming and inference performance with controlled comparisons
 - [ ] Phase 17: complete end-to-end API tests, documentation, regression CI and v2 release checks
