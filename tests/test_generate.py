@@ -158,7 +158,7 @@ def test_local_generator_only_decodes_new_tokens(monkeypatch, fake_torch):
 
         def __call__(self, rendered, **kwargs):
             assert rendered == "FAKE CHAT PREFIX"
-            assert kwargs["truncation"] and kwargs["max_length"] == 512
+            assert kwargs["truncation"] and kwargs["max_length"] == 1024
             assert kwargs["add_special_tokens"] is False
             return {
                 "input_ids": fake_torch.tensor([[10, 20, 30]]),
@@ -230,3 +230,12 @@ def test_cuda_request_does_not_silently_fall_back(monkeypatch, fake_torch):
 
     with pytest.raises(RuntimeError, match="CUDA was requested"):
         LocalGenerator()
+
+
+def test_local_generator_context_limit_supports_grounded_rag():
+    """RAG's allowed token budget must stay below LocalGenerator's input bound."""
+    from greek_nlp.llm.generator import MAX_INPUT_TOKENS
+    from greek_nlp.rag.grounded import MAX_PROMPT_TOKENS
+
+    assert MAX_INPUT_TOKENS == 1024
+    assert 512 < MAX_PROMPT_TOKENS < MAX_INPUT_TOKENS

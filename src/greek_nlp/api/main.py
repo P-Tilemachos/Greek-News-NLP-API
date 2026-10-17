@@ -11,6 +11,8 @@ from greek_nlp.api.schemas import (
     ClassifyResponse,
     GenerateRequest,
     GenerateResponse,
+    RAGRequest,
+    RAGResponse,
     SearchRequest,
     SearchResponse,
 )
@@ -132,3 +134,23 @@ def generate(request: GenerateRequest) -> GenerateResponse:
             detail="Local LLM unavailable. Check optional dependencies, model access and memory.",
         ) from exc
     return GenerateResponse(**output)
+
+
+def get_grounded_rag():
+    # Opt-in. Original extractive /ask, /search and /generate are unchanged.
+    from greek_nlp.rag.grounded import GroundedRAG
+
+    return GroundedRAG(get_reranking_retriever(), get_generator)
+
+
+@app.post("/rag/ask", response_model=RAGResponse)
+def rag_ask(request: RAGRequest) -> RAGResponse:
+    """Experimental RAG with source excerpts and conservative abstention."""
+    try:
+        result = get_grounded_rag().ask(request.question, request.k, request.max_new_tokens)
+    except (ImportError, OSError, RuntimeError, ValueError, KeyError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Grounded RAG unavailable; check indexes, models and memory.",
+        ) from exc
+    return RAGResponse(**result)

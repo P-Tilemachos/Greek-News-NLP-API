@@ -14,7 +14,7 @@ DEFAULT_SYSTEM_PROMPT = (
     "Μην επαναλαμβάνεις την ερώτηση και μην επινοείς πληροφορίες. "
     "Αν δεν γνωρίζεις την απάντηση, πες ότι δεν είσαι σίγουρος."
 )
-MAX_INPUT_TOKENS = 512
+MAX_INPUT_TOKENS = 1024  # bounded context for grounded RAG plus chat-template overhead
 
 
 class LocalGenerator:

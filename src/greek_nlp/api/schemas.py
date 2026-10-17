@@ -71,3 +71,27 @@ class GenerateResponse(BaseModel):
     generated_text: str
     input_tokens: int = Field(ge=1)
     output_tokens: int = Field(ge=0)
+
+
+class RAGRequest(BaseModel):
+    question: str = Field(..., min_length=3, max_length=240, description="Greek factual question")
+    k: int = Field(3, ge=1, le=5, description="Top reranked articles to inspect")
+    max_new_tokens: int = Field(96, ge=1, le=128)
+
+
+class RAGSource(BaseModel):
+    reference: str = Field(description="Citation marker, e.g. [1]")
+    doc_id: str
+    label: str
+    excerpt: str
+    retrieval_score: float = Field(description="Raw, uncalibrated reranker score")
+
+
+class RAGResponse(BaseModel):
+    mode: Literal["grounded_rag"]
+    answer: str | None
+    abstained: bool
+    reason: str | None
+    model: str | None
+    sources: list[RAGSource]
+    faithfulness_verified: Literal[False] = False
