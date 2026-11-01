@@ -11,21 +11,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -e ".[dev]"
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: python -m pytest -q
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install "requests>=2.32,<3"
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format
+        run: ruff format --check .
+
+      - name: Run tests
+        run: python -m pytest -q
 
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Build image
         run: docker build -t greek-news-nlp-api .
+
       - name: Smoke test
         run: |
           docker run -d --name api -p 8000:8000 greek-news-nlp-api
