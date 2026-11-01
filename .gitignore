@@ -230,3 +230,6 @@ mlruns/scratch.py
 
 # Phase 15 local evaluation data and human reviews
 results/phase15_local/
+
+# Phase 16 local benchmarks and hardware metadata
+results/phase16_local/

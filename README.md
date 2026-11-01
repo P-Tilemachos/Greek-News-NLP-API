@@ -13,7 +13,7 @@ A REST API for Greek news: topic classification with a fine-tuned **GreekBERT**,
 - **LLM comparison.** Benchmarked against zero-shot Qwen2.5 (1.5B, 3B) and a QLoRA fine-tuned Qwen2.5-1.5B on the same test set. GreekBERT scored highest (+8.3 macro-F1 points over QLoRA, 95% bootstrap CI +3.2 to +14.1) and had the lowest latency in a single-request T4 benchmark.
 - **Retrieval.** Dense search (multilingual-e5 + FAISS), hybrid search (BM25 + dense with Reciprocal Rank Fusion) and Top-5 cross-encoder reranking, evaluated on 480 frozen synthetic queries. On later-sentence queries, Recall@1 rises from 0.31 (dense) to 0.50 (hybrid) and 0.71 (with reranking).
 - **Question answering.** The extractive `/ask` endpoint returns the source article at rank 1 for 95% of 40 answerable questions. `/rag/ask` adds grounded generative answers with citations and abstention; a Phase 15 exploratory evaluation documented 100% abstention (80/80), so answer-generation faithfulness remains unassessed.
-- **Engineering.** FastAPI, Docker image, GitHub Actions (lint, format check, tests, Docker build with a health check), and models and index hosted on the Hugging Face Hub and loaded lazily.
+- **Engineering.** FastAPI, Docker image, GitHub Actions (lint, format check, tests, Docker build with a health check), and models and index hosted on the Hugging Face Hub and loaded lazily. Phase 16 adds an opt-in localhost llama.cpp/GGUF inference backend for `/generate`, with PyTorch as the default.
 - **Transparent evaluation.** Benchmarks disclose label provenance, sampling assumptions, and limitations, including the Phase 15 over-abstention finding.
 
 ## Architecture
@@ -29,14 +29,16 @@ flowchart LR
     HYB --> RET
     API -->|/ask| QA[Extractive QA]
     QA --> RET
-    API -->|/generate| LLM[Local open-weight LLM]
+    API -->|/generate| GEN[Optional inference backend]
+    GEN --> TORCH[PyTorch CPU default]
+    GEN --> GGUF[llama.cpp GGUF opt-in]
     API -->|/rag/ask| RAG[Grounded RAG with citations]
     RAG --> RET
-    RAG --> LLM
+    RAG --> TORCH
     HUB[(Hugging Face Hub)] -. model and index .-> CLF
     HUB -. model and index .-> RET
     HUB -. reranker weights .-> CE
-    HUB -. optional LLM weights .-> LLM
+    HUB -. optional LLM weights .-> TORCH
 ```
 
 ## Results
@@ -102,6 +104,67 @@ review records and other run artifacts remain excluded from Git.
 See [Phase 15 protocol, findings and limitations](docs/phase_15_rag_evaluation.md)
 for dataset caveats, detailed metrics and offline reproduction commands.
 
+## Phase 16 — CPU inference performance and optional GGUF backend
+
+Phase 16 evaluated CPU inference using a fixed **development-only** Greek `/generate`
+prompt, one warm-up and three measured HTTP requests per configuration. These are
+**end-to-end** timings, not isolated model kernel performance. The original PyTorch
+Qwen model remains the default; llama.cpp is an **explicit opt-in** for `/generate`
+only. The grounded `/rag/ask` pipeline continues to use the original PyTorch
+model and has **not** had its Phase 15 over-abstention issue resolved.
+
+| Configuration | Median HTTP latency | Observed peak server RSS | Notes |
+|---|---:|---:|---|
+| PyTorch CPU, Qwen2.5-1.5B-Instruct | 25.21 s | 6,002.13 MiB | FP32 CPU baseline |
+| llama.cpp, Qwen2.5-1.5B-Instruct GGUF Q4_K_M | 2.79 s | 1,156.09 MiB | ~9.04× lower median latency on this prompt |
+| llama.cpp, Llama-Krikri-8B-Instruct GGUF Q4_K_M | 11.14 s | 4,841.20 MiB | Greek-focused candidate; different model |
+
+All three configurations produced 48 output tokens in this matched development
+workload. RSS is a sampled Windows *working-set* approximation for already-loaded
+server processes, **not** startup peak, unique model allocation or system-wide RAM.
+The faster result combines **backend and weight-format changes**; it is not an
+isolated quantization benefit. A separate Qwen GGUF streaming probe measured
+median first-visible-content latency of **57.93 ms** and full streamed response
+latency of **2.37 s**; the former is not necessarily an internal model TTFT and
+may benefit from prompt caching.
+
+A small, **synthetic eight-case Greek quality screen** for Krikri was assessed
+provisionally as **7/8 acceptable**. It failed conflict handling by making an
+unsupported certainty claim. This is not an independent, blinded or comprehensive
+quality benchmark; raw answers and review material remain **local, ignored by Git**.
+The local opt-in integration returned HTTP 200 with the Krikri model ID, and the
+full local suite passed **132 tests** and Ruff checks. Publication and GitHub CI
+validation for Phase 16 remain separate steps.
+
+### Optional llama.cpp backend (local development)
+
+First, install llama.cpp independently, obtain the model in its cache and start
+its server **on loopback only**, in a separate terminal:
+
+```bat
+llama serve -hf ilsp/Llama-Krikri-8B-Instruct-GGUF:Q4_K_M --host 127.0.0.1 --port 9931 -t 8 -c 2048 -ngl 0
+```
+
+Then start FastAPI in another Windows Command Prompt / Anaconda Prompt:
+
+```bat
+set "LLM_BACKEND=llamacpp"
+set "LLAMACPP_BASE_URL=http://127.0.0.1:9931"
+set "LLAMACPP_MODEL_MATCH=Krikri"
+python -m uvicorn greek_nlp.api.main:app --host 127.0.0.1 --port 8001
+```
+
+The `/generate` request and response schema remains unchanged. Without the
+explicit `LLM_BACKEND=llamacpp` setting, the existing PyTorch generator is used.
+This experimental external backend requires its own running server; a FastAPI
+`/health` success does **not** establish llama.cpp availability. Do not expose
+the unauthenticated llama.cpp service publicly; implement authentication, network
+restrictions and deployment controls before considering public access. Verify
+model-specific license terms separately from this repository's MIT license.
+
+See [Phase 16 experimental results and caveats](docs/phase_16_results.md) and
+[optional llama.cpp integration](docs/phase_16_optional_llamacpp_integration.md).
+
 ## API
 
 | Endpoint | Description |
@@ -111,7 +174,7 @@ for dataset caveats, detailed metrics and offline reproduction commands.
 | `POST /search` | Dense E5/FAISS by default; opt-in `mode: "hybrid"` (BM25 + E5 + RRF) or `mode: "rerank"` (hybrid + Cross-Encoder Top-5) |
 | `POST /ask` | Extractive question answering: the most relevant sentences with article ids, plus the source articles |
 | `POST /rag/ask` | Grounded generative answer with source citations and abstention |
-| `POST /generate` | Optional ungrounded local text generation with a bounded open-source LLM |
+| `POST /generate` | Bounded ungrounded generation: PyTorch by default, opt-in localhost llama.cpp/GGUF (Phase 16) |
 
 Example `/classify` request:
 
@@ -206,6 +269,8 @@ The test suite covers API responses and input validation using mocked inference 
 - [Retrieval evaluation: dense, hybrid and reranking](docs/retrieval.md)
 - [Extractive QA evaluation](docs/qa_evaluation.md)
 - [Phase 15 — Grounded RAG exploratory evaluation](docs/phase_15_rag_evaluation.md)
+- [Phase 16 — CPU/GGUF results and limitations](docs/phase_16_results.md)
+- [Phase 16 — Optional llama.cpp integration](docs/phase_16_optional_llamacpp_integration.md)
 - Integration guides: [hybrid search](docs/phase_11_hybrid_integration.md), [reranking](docs/phase_12_reranking_integration.md), [local LLM generation](docs/phase_13_local_llm_integration.md)
 - [Reproducing the experiments](docs/reproducing.md)
 - [Full list of limitations](docs/limitations.md)
@@ -219,10 +284,11 @@ src/greek_nlp/
   models/    GreekBERT inference
   rag/       Dense FAISS, hybrid retrieval, reranking, extractive QA and grounded RAG
   evaluation/  Offline grounded RAG scorer and review import/export
+  llm/       PyTorch generator and optional llama.cpp HTTP backend
 notebooks/   experiments and offline reporting notebooks
 scripts/     collection, reporting and developer utilities
 evaluation/  public schema and run-metadata templates (not private review data)
-results/     local benchmark and evaluation outputs (Phase 15 local data ignored)
+results/     local benchmark and evaluation outputs (Phase 15/16 local data ignored)
 docs/        screenshots, reports and integration guides
 tests/       pytest suite (models are mocked, so CI needs no weights)
 Dockerfile   CPU image of the API
@@ -241,6 +307,7 @@ Dockerfile   CPU image of the API
 - `/ask` is extractive and has no answerability threshold. In the Phase 15 exploratory `/rag/ask` run, all 80 questions were abstained on, so response faithfulness, correctness and hallucination rates could not be measured. `/generate` output is ungrounded.
 - The LLM benchmark is a single run per model on one dataset, and the identity of the re-evaluated GreekBERT checkpoint relative to the historical one is unresolved.
 - Phase 15 negative-case labels are provisional, the two development cases are not held out, and the 80 author reviews are not independent blinded judgments.
+- Phase 16 results are development-only single-workload experiments. Runtime, tokenization and quantization differ across backends; Greek answer-quality screening is limited to eight synthetic cases with one known failure, not independent validation. The llama.cpp service is local-only and unauthenticated.
 - There is no public live demo (a Hugging Face Spaces attempt was blocked by the free-tier CPU quota).
 
 The full list is in [docs/limitations.md](docs/limitations.md).
@@ -272,5 +339,5 @@ The full list is in [docs/limitations.md](docs/limitations.md).
 
 ### Upcoming Phases
 
-- [ ] Phase 16 — Optimize quantization, streaming, latency, memory usage and inference performance through controlled comparisons.
+- [ ] Phase 16 — Local quantization, streaming, latency, memory and opt-in FastAPI integration completed; final documentation commit and GitHub CI verification pending.
 - [ ] Phase 17 — Expand end-to-end integration and regression tests, strengthen CI and documentation, and prepare v2 release validation.

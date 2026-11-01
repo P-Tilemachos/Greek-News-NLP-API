@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from threading import Lock
 from typing import Annotated, Protocol
@@ -75,9 +76,28 @@ def _load_generator():
 
 
 def get_generator():
-    # Serialize the first model initialization; only POST /generate uses this.
+    # Preserve the original PyTorch generator for grounded RAG, regardless of
+    # the optional /generate backend selection.
     with _generator_init_lock:
         return _load_generator()
+
+
+@lru_cache(maxsize=1)
+def _load_llamacpp_generator():
+    # No server connection or model load until /generate is called.
+    from greek_nlp.llm.llamacpp_backend import LlamaCppGenerator
+
+    return LlamaCppGenerator()
+
+
+def get_generation_backend():
+    """Select only the /generate implementation. Grounded RAG stays unchanged."""
+    choice = os.environ.get("LLM_BACKEND", "torch").strip().lower()
+    if choice == "torch":
+        return get_generator()
+    if choice == "llamacpp":
+        return _load_llamacpp_generator()
+    raise ValueError("LLM_BACKEND must be 'torch' or 'llamacpp'")
 
 
 @lru_cache(maxsize=1)
@@ -124,9 +144,9 @@ def ask(
 
 @app.post("/generate", response_model=GenerateResponse)
 def generate(request: GenerateRequest) -> GenerateResponse:
-    """Opt-in local LLM text completion, without retrieval or citations (Phase 13)."""
+    """Standalone generation; opt-in llama.cpp does not change grounded RAG."""
     try:
-        output = get_generator().generate(request.prompt, request.max_new_tokens)
+        output = get_generation_backend().generate(request.prompt, request.max_new_tokens)
     except (ImportError, OSError, RuntimeError, ValueError) as exc:
         # Do not expose model cache paths, tokens, or internal stack traces to callers.
         raise HTTPException(

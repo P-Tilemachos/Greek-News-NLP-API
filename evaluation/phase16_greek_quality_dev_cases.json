@@ -1,0 +1,55 @@
+{
+  "schema_version": "phase16.quality_screen.v1",
+  "status": "DEVELOPMENT_ONLY_NOT_GOLD",
+  "notes": "All example news passages are synthetic and self-contained. Never use Phase 15 held-out cases to select or tune a model.",
+  "cases": [
+    {
+      "id": "greek_definition",
+      "category": "Greek conceptual accuracy",
+      "question": "Τι είναι η μηχανική μάθηση; Απάντησε με μία ολοκληρωμένη, απλή πρόταση στα ελληνικά.",
+      "review_criterion": "Should describe computers/models learning patterns from data, not physical machines or visual optics."
+    },
+    {
+      "id": "arithmetic",
+      "category": "Exact numeric instruction",
+      "question": "Πόσο κάνει 17 + 25; Απάντησε μόνο με τον αριθμό.",
+      "review_criterion": "Exact answer: 42, with no unrelated text."
+    },
+    {
+      "id": "extract_number",
+      "category": "Grounded extraction",
+      "question": "Απόσπασμα είδησης: «Στη δράση καθαρισμού της ακτής συμμετείχαν 24 εθελοντές. Η εκδήλωση οργανώθηκε το Σάββατο». Πόσοι εθελοντές συμμετείχαν; Απάντησε μόνο από το απόσπασμα.",
+      "review_criterion": "Exact answer: 24; no fabricated counts."
+    },
+    {
+      "id": "extract_date",
+      "category": "Grounded date extraction",
+      "question": "Απόσπασμα είδησης: «Το νέο δημοτικό αναγνωστήριο θα ανοίξει στις 6 Μαΐου 2026, σύμφωνα με την ανακοίνωση του δήμου». Ποια ημερομηνία αναφέρεται;",
+      "review_criterion": "Should give 6 May 2026, with no invented date."
+    },
+    {
+      "id": "news_summary",
+      "category": "Faithful Greek summarization",
+      "question": "Σύνοψη σε μία ελληνική πρόταση μόνο από τα ακόλουθα στοιχεία: «Ο δήμος παρέδωσε δέκα νέα ποδήλατα στη δημοτική βιβλιοθήκη. Τα ποδήλατα θα δανείζονται δωρεάν. Το πρόγραμμα ξεκινά την Παρασκευή». Μην προσθέσεις πληροφορίες.",
+      "review_criterion": "Should preserve 10 bikes, free lending and Friday start; no added facts."
+    },
+    {
+      "id": "missing_salary",
+      "category": "Evidence-based abstention",
+      "question": "Απόσπασμα είδησης: «Η εταιρεία ανακοίνωσε ότι προσλαμβάνει δώδεκα μηχανικούς. Οι αιτήσεις λήγουν την Παρασκευή». Ποιος είναι ο ακριβής μικτός μηνιαίος μισθός; Αν δεν αναφέρεται, πες «Δεν αναφέρεται στο απόσπασμα».",
+      "review_criterion": "Should explicitly say the salary is not stated; must not invent an amount."
+    },
+    {
+      "id": "conflicting_evidence",
+      "category": "Conflict recognition",
+      "question": "Δύο ανακοινώσεις για την ίδια συνάντηση διαφωνούν: Α: «Η συνάντηση αρχίζει στις 09:00». Β: «Η συνάντηση αρχίζει στις 10:00». Ποια ώρα είναι βέβαιη με βάση μόνο αυτές τις πληροφορίες;",
+      "review_criterion": "Should say no single start time can be confirmed because the sources disagree."
+    },
+    {
+      "id": "dev_album_moss",
+      "category": "Known development fact extraction",
+      "question": "Απόσπασμα: «Η Maya Hawke ανακοίνωσε τον δεύτερο δίσκο της με τίτλο Moss μαζί με το single Thérèse». Ποιος είναι ο τίτλος του δεύτερου δίσκου της;",
+      "review_criterion": "Exact answer: Moss. This is a known development fact, not a held-out Phase 15 case."
+    }
+  ]
+}

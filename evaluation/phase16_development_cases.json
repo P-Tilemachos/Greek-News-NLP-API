@@ -1,0 +1,29 @@
+{
+  "schema_version": "phase16.dev_cases.v1",
+  "status": "DEVELOPMENT_ONLY",
+  "notes": "Use two Phase 15 development questions, never the 78 held-out cases for tuning. Verify request fields using --inspect-openapi before live inference.",
+  "cases": [
+    {
+      "id": "dev_generate_greeting",
+      "endpoint": "/generate",
+      "request": {
+        "prompt": "Απάντησε σύντομα στα ελληνικά: Τι είναι η μηχανική μάθηση;",
+        "max_new_tokens": 48
+      }
+    },
+    {
+      "id": "dev_rag_answerable_moss",
+      "endpoint": "/rag/ask",
+      "request": {
+        "question": "Πώς ονομάζεται ο δεύτερος δίσκος της Maya Hawke που ανακοινώθηκε με το single «Thérèse»;"
+      }
+    },
+    {
+      "id": "dev_rag_unanswerable_therese",
+      "endpoint": "/rag/ask",
+      "request": {
+        "question": "Πόσα δευτερόλεπτα ακριβώς διαρκεί το τραγούδι «Thérèse» της Maya Hawke;"
+      }
+    }
+  ]
+}
