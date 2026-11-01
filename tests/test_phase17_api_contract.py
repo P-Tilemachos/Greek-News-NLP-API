@@ -3,7 +3,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from greek_nlp.api.main import app
+from greek_nlp.api import main
+
+app = main.app
 
 
 @pytest.fixture(scope="module")
@@ -39,7 +41,12 @@ def test_documented_endpoints_exist_in_schema(client, path):
 
 
 @pytest.mark.parametrize("path", ["/classify", "/search", "/ask", "/rag/ask", "/generate"])
-def test_empty_json_is_rejected_without_running_inference(client, path):
-    # Assumes all documented POST endpoints require at least one request field.
+def test_empty_json_is_rejected_without_running_inference(client, monkeypatch, path):
+    # FastAPI resolves Depends() before reporting body validation errors.
+    # Replace heavyweight dependencies so this test works in isolation and
+    # cannot download ML artifacts even if the request body is invalid.
+    for dependency in (main.get_classifier, main.get_retriever, main.get_qa):
+        monkeypatch.setitem(app.dependency_overrides, dependency, lambda: object())
+
     response = client.post(path, json={})
     assert response.status_code == 422, f"Unexpected status from {path}: {response.status_code}"

@@ -233,3 +233,13 @@ results/phase15_local/
 
 # Phase 16 local benchmarks and hardware metadata
 results/phase16_local/
+
+# Phase 17 generated local files (APPEND to existing .gitignore; do not replace it)
+phase17_source.zip
+phase17_source_tree.txt
+phase17_tests_tree.txt
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+test-results.xml
