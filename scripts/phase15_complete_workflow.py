@@ -1,0 +1,529 @@
+"""Phase 15 safe pilot evaluation workflow. Does not invoke any LLM.
+
+Install under scripts/ and run from the repository root:
+  python scripts/phase15_complete_workflow.py prepare
+  python scripts/phase15_complete_workflow.py report
+  python scripts/phase15_complete_workflow.py review-html
+  python scripts/phase15_complete_workflow.py reviewed-report --input PATH
+
+All output stays local/private. Pilot / author labels are not independent gold.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+from copy import deepcopy
+from pathlib import Path
+
+from greek_nlp.evaluation.rag_eval import (
+    SCHEMA,
+    _atomic_write,
+    evaluate,
+    load_cases,
+    markdown_report,
+)
+
+ROOT = Path(__file__).resolve().parent.parent
+HOME = ROOT / "results" / "phase15_local"
+FILE_STAGED = HOME / "phase15_80_CANDIDATES_NOT_FROZEN.json"
+FILE_PILOT_LABELS = HOME / "phase15_80_PILOT_AUTHOR_LABELS_NOT_GOLD.json"
+FILE_PILOT2 = HOME / "phase15_pilot2_predictions.json"
+FILE_INPUT78 = HOME / "phase15_eval78_NOT_FROZEN.json"
+FILE_PRED78 = HOME / "phase15_eval78_predictions.json"
+FILE_PRED80 = HOME / "phase15_pilot80_predictions_NOT_GOLD.json"
+FILE_MANIFEST = HOME / "phase15_completion_manifest.json"
+FILE_REPORT = HOME / "phase15_completion_summary_NOT_GOLD.md"
+FILE_REVIEW_HTML = HOME / "phase15_prediction_author_review.html"
+FILE_REVIEWED = HOME / "phase15_pilot80_AUTHOR_REVIEWED.json"
+EXPECTED_PILOT_IDS = {"p15_a_001", "p15_u_001"}
+
+
+def check(test: bool, message: str) -> None:
+    if not test:
+        raise ValueError(message)
+
+
+def sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load(path: Path) -> list[dict]:
+    check(path.exists(), f"Missing input: {path}")
+    return load_cases(path)
+
+
+def by_id(rows: list[dict]) -> dict[str, dict]:
+    result = {r["id"]: r for r in rows}
+    check(len(result) == len(rows), "Duplicate case ID")
+    return result
+
+
+def write_json(path: Path, content: object, *, if_new: bool = False) -> None:
+    data = json.dumps(content, ensure_ascii=False, indent=2) + "\n"
+    if if_new and path.exists():
+        check(
+            path.read_text(encoding="utf-8") == data,
+            f"Existing file differs; will not overwrite: {path}",
+        )
+        print(f"ALREADY PRESENT (unchanged): {path}")
+        return
+    _atomic_write(path, data)
+    print(f"SAVED: {path}")
+
+
+def core_inputs():
+    staged, provisional, pilot = load(FILE_STAGED), load(FILE_PILOT_LABELS), load(FILE_PILOT2)
+    check(len(staged) == len(provisional) == 80, "Need both 80-case views")
+    check(
+        len(pilot) == 2 and {r["id"] for r in pilot} == EXPECTED_PILOT_IDS,
+        "Original two development pilot cases are missing or changed",
+    )
+    a, b, p = by_id(staged), by_id(provisional), by_id(pilot)
+    check(set(a) == set(b), "Case IDs disagree in 80-case views")
+    for cid, row in a.items():
+        other = b[cid]
+        check(row["question"] == other["question"], f"Question changed: {cid}")
+        check(
+            row.get("gold_doc_ids", []) == other.get("gold_doc_ids", []),
+            f"Gold sources changed: {cid}",
+        )
+        check(
+            row.get("prediction") is None and other.get("prediction") is None,
+            f"80-case inputs already include predictions: {cid}",
+        )
+        check(
+            row.get("human_review") is None and other.get("human_review") is None,
+            f"80-case inputs already include judgments: {cid}",
+        )
+        if cid.startswith("p15_a_"):
+            check(
+                row["answerable"] is True and other["answerable"] is True,
+                f"Positive author label unexpected: {cid}",
+            )
+        else:
+            check(
+                cid.startswith("p15_u_")
+                and row["answerable"] is None
+                and other["answerable"] is False
+                and not row["gold_doc_ids"],
+                f"Negative provisional labels inconsistent: {cid}",
+            )
+    check(
+        sum(x.startswith("p15_a_") for x in a) == 40
+        and sum(x.startswith("p15_u_") for x in a) == 40,
+        "Require 40 positive + 40 provisional negative cases",
+    )
+    for cid in EXPECTED_PILOT_IDS:
+        check(a[cid]["question"] == p[cid]["question"], f"Changed pilot question: {cid}")
+        check(a[cid]["gold_doc_ids"] == p[cid]["gold_doc_ids"], f"Changed pilot sources: {cid}")
+        check(p[cid]["prediction"] is not None, f"Missing saved pilot response: {cid}")
+        check(p[cid].get("human_review") is None, "Development pilot reviews cannot be mixed in")
+    return staged, provisional, pilot
+
+
+def command_prepare():
+    staged, _, _ = core_inputs()
+    untested = [deepcopy(r) for r in staged if r["id"] not in EXPECTED_PILOT_IDS]
+    check(len(untested) == 78, "Expected 78 untested cases")
+    write_json(FILE_INPUT78, {"schema_version": SCHEMA, "cases": untested}, if_new=True)
+    manifest = {
+        "schema_version": "phase15.completion_plan.v1",
+        "status": "PILOT_AUTHOR_LABELS_NOT_GOLD_NOT_FROZEN",
+        "development_case_ids_excluded_from_78": sorted(EXPECTED_PILOT_IDS),
+        "evaluated_cases_remaining": 78,
+        "answerable_author_labeled_in_78": 39,
+        "negative_author_screened_unlabeled_in_78": 39,
+        "paired_source_documents_in_full80": 40,
+        "model_prompt_tuning_allowed_only_on_development_cases": True,
+        "existing_pilot2_sha256": sha(FILE_PILOT2),
+        "staged_80_sha256": sha(FILE_STAGED),
+        "pilot_author_labels_80_sha256": sha(FILE_PILOT_LABELS),
+        "input_78_sha256": sha(FILE_INPUT78),
+        "source_code_sha256": {
+            str(name): sha(ROOT / name)
+            for name in (
+                "src/greek_nlp/rag/grounded.py",
+                "src/greek_nlp/llm/generator.py",
+                "src/greek_nlp/api/main.py",
+            )
+            if (ROOT / name).exists()
+        },
+        "corpus_index_sha256": {
+            str(name): sha(ROOT / name)
+            for name in (
+                "models_store/rag_index/docs.json",
+                "models_store/rag_index/articles.faiss",
+            )
+            if (ROOT / name).exists()
+        },
+        "caveats": [
+            "The two earlier development pilot predictions must not be counted as "
+            "independent held-out tests.",
+            "All negative labels remain unproven; provisional labels may be used "
+            "only for exploratory summaries.",
+            "Author-reviewed answers are not independent blinded annotations.",
+            "The original Notebook 10 question-level independence is not fully verified.",
+            "No code or prompt tuning is permitted on the 78-case evaluation set.",
+        ],
+    }
+    write_json(FILE_MANIFEST, manifest, if_new=True)
+    print("READY: 78 remaining questions; no Qwen inference was performed here.")
+    print(
+        "NEXT: python scripts\\phase15_collect_predictions.py --cases "
+        "results\\phase15_local\\phase15_eval78_NOT_FROZEN.json "
+        "--output results\\phase15_local\\phase15_eval78_predictions.json "
+        "--max-requests 78 --confirm-live"
+    )
+
+
+def load_predictions(strict_complete: bool = False):
+    staged, pilot_labels, original2 = core_inputs()
+    check(FILE_MANIFEST.exists(), "Run prepare first")
+    manifest = json.loads(FILE_MANIFEST.read_text(encoding="utf-8"))
+    for key, path in [
+        ("input_78_sha256", FILE_INPUT78),
+        ("staged_80_sha256", FILE_STAGED),
+        ("pilot_author_labels_80_sha256", FILE_PILOT_LABELS),
+        ("existing_pilot2_sha256", FILE_PILOT2),
+    ]:
+        check(manifest[key] == sha(path), f"Input changed since prepare: {path}")
+    for name, original_hash in manifest.get("source_code_sha256", {}).items():
+        check(
+            (ROOT / name).exists() and sha(ROOT / name) == original_hash,
+            f"Source code changed since prepare: {name}; start a new protocol",
+        )
+    for name, original_hash in manifest.get("corpus_index_sha256", {}).items():
+        check(
+            (ROOT / name).exists() and sha(ROOT / name) == original_hash,
+            f"Corpus/index changed since prepare: {name}",
+        )
+    a = by_id(staged)
+    pilot = by_id(original2)
+    seventy_eight = load(FILE_PRED78) if FILE_PRED78.exists() else load(FILE_INPUT78)
+    check(len(seventy_eight) == 78, "Expected exactly 78 evaluation records")
+    ev = by_id(seventy_eight)
+    check(set(ev) == set(a) - EXPECTED_PILOT_IDS, "78-case IDs do not match plan")
+    for cid, row in ev.items():
+        original = a[cid]
+        check(row["question"] == original["question"], f"Changed question in checkpoint: {cid}")
+        check(
+            row.get("answerable") == original.get("answerable"),
+            f"Changed answerable label in checkpoint: {cid}",
+        )
+        check(
+            row.get("gold_doc_ids", []) == original.get("gold_doc_ids", []),
+            f"Changed source IDs in checkpoint: {cid}",
+        )
+    done = sum(r.get("prediction") is not None for r in ev.values())
+    if strict_complete:
+        check(done == 78, f"Only {done}/78 predictions collected. Resume inference first.")
+    complete = []
+    for row in pilot_labels:
+        cid = row["id"]
+        pred = (pilot[cid] if cid in pilot else ev[cid]).get("prediction")
+        final = deepcopy(row)
+        final["prediction"] = deepcopy(pred)
+        complete.append(final)
+    return seventy_eight, complete, done
+
+
+def _subset(rows: list[dict], ids: set[str]) -> list[dict]:
+    return [r for r in rows if r["id"] in ids]
+
+
+def write_reports(verified: list[dict] | None = None):
+    ev78, pilot80, done = load_predictions(strict_complete=False)
+    if verified is not None:
+        ref = by_id(pilot80)
+        check(
+            len(verified) == 80 and set(by_id(verified)) == set(ref),
+            "Reviewed cases differ from original 80 predictions",
+        )
+        for r in verified:
+            base = ref[r["id"]]
+            check(
+                r["question"] == base["question"]
+                and r["answerable"] == base["answerable"]
+                and r["prediction"] == base["prediction"],
+                f"Cannot alter predictions/labels during human review: {r['id']}",
+            )
+        pilot80 = verified
+    result78 = evaluate(ev78)
+    result80 = evaluate(pilot80)
+    summary = {
+        "status": "COMPLETE_PREDICTION_COLLECTION"
+        if done == 78
+        else "INCOMPLETE_PREDICTION_COLLECTION",
+        "evaluation_status": "EXPLORATORY_AUTHOR_LABELS_NOT_INDEPENDENT_GOLD",
+        "retrieved_inference": {"finished_78": done, "remaining": 78 - done},
+        "development_pilot": {
+            "cases": 2,
+            "p15_a_001": "false_abstention_despite_gold_source",
+            "p15_u_001": "abstention_on_unverified_negative",
+        },
+        "eval78": result78,
+        "pilot80": result80,
+        "input_sha256": {
+            str(path.name): sha(path)
+            for path in (FILE_STAGED, FILE_PILOT_LABELS, FILE_PILOT2, FILE_INPUT78)
+            if path.exists()
+        },
+        "limitations": [
+            "Two prior development cases excluded from 78-case evaluation results.",
+            "Negative cases are author-screened candidate negatives, not verified ground truth.",
+            "Question-level Notebook 10 overlap is not completely resolved.",
+            "The 40 positive and negative questions are paired by source document; "
+            "not independent article samples.",
+            "BM25 top5 and E5 top8 retrieval nonappearance does not prove corpus-wide absence.",
+            "Structural citation validity is not semantic faithfulness.",
+            "Separate author judgments (or independently blind review) are needed "
+            "for faithfulness claims.",
+            "Do not mark Phase 15 as a validated publication-grade gold benchmark.",
+        ],
+    }
+    write_json(HOME / "phase15_final_summary_NOT_GOLD.json", summary)
+    summary_md = [
+        "# Phase 15 — Grounded RAG evaluation (exploratory)",
+        "",
+        (
+            f"**Prediction coverage:** {done}/78 new evaluation cases; "
+            "2 prior development-pilot cases kept separate."
+        ),
+        "**Status:** " + summary["status"],
+        "",
+        "## Provenance and limits",
+        "",
+        "- 40 positive cases were author-reviewed; 40 negatives were "
+        "author-screened with BM25 and E5.",
+        "- Negative `False` labels are **pilot assumptions**, not independently "
+        "verified gold labels.",
+        "- Do not claim independent generalization, fully validated hallucination "
+        "rates, or complete Phase 15.",
+        "- Model/prompt versions should remain unchanged during the 78-case inference run.",
+        "- Source article pairs and 256-token embedding limit affect interpretation.",
+        "",
+        "## Held-out from the two development pilots (78 cases)",
+        "",
+        markdown_report(result78),
+        "",
+        "## All 80, illustrative author-label pilot view (NOT GOLD)",
+        "",
+        markdown_report(result80),
+        "",
+        "## Pilot 2 diagnostic findings",
+        "",
+        "- p15_a_001 retrieved the correct source with Moss, but abstained (over-abstention).",
+        "- p15_u_001 abstained on a provisionally negative question.",
+        "",
+    ]
+    _atomic_write(FILE_REPORT, "\n".join(summary_md))
+    print("PREDICTIONS SAVED:", done, "/ 78")
+    print("REPORT:", FILE_REPORT)
+    if done == 78 and verified is None:
+        write_json(FILE_PRED80, {"schema_version": SCHEMA, "cases": pilot80}, if_new=True)
+    if done != 78:
+        print("INCOMPLETE: resume 78-case collection before final human review")
+    else:
+        print(
+            "READY FOR REVIEW: review all answered outputs; these remain pilot metrics, not gold."
+        )
+
+
+def render_review_html():
+    _, complete, _ = load_predictions(strict_complete=True)
+    check(FILE_PRED80.exists(), "Run report once after 78/78 predictions")
+    notes_file = HOME / "phase15_answerable_review_notes.json"
+    notes = (
+        json.loads(notes_file.read_text(encoding="utf-8")).get("records", [])
+        if notes_file.exists()
+        else []
+    )
+    expected = {r["id"]: r.get("proposed_answer_unverified", "") for r in notes}
+    rows = []
+    for row in complete:
+        pred = row["prediction"]
+        rows.append(
+            {
+                "id": row["id"],
+                "question": row["question"],
+                "label": (
+                    "author-reviewed positive" if row["answerable"] else "PROVISIONAL negative"
+                ),
+                "answerable": ("true" if row["answerable"] else "false"),
+                "expected": expected.get(row["id"], ""),
+                "answer": pred["answer"] or "",
+                "abstained": str(pred["abstained"]).lower(),
+                "sources_json": json.dumps(pred.get("sources", []), ensure_ascii=False),
+                "sources": pred.get("sources", []),
+                "reason": pred.get("reason") or "",
+            }
+        )
+    data = (
+        json.dumps(rows, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+    markup = r"""<!DOCTYPE html><html lang="el"><head><meta charset="UTF-8">
+<title>Phase 15 — Manual output review (author, NOT GOLD)</title>
+<style>
+body{background:#f3f6fb;color:#183153;font:15px system-ui;margin:auto;max-width:1150px;padding:20px}
+section{background:white;border:1px solid #d5deea;border-radius:11px;padding:18px;margin:14px 0}
+pre{white-space:pre-wrap;word-break:break-word;background:#f6f8fb;padding:10px}
+label{display:inline-block;margin:7px 12px 7px 0}
+button,select,input,textarea{font:inherit;padding:8px}
+textarea{width:95%;min-height:50px} .muted{color:#586579}.ok{border-left:5px solid #14875f}
+.hint{background:#fff4d4;padding:12px}
+</style></head><body>
+<h1>Phase 15 — RAG response review</h1>
+<p class="hint">80 entries include two prior development cases.
+Negative answerability is provisional.
+Do not auto-approve. For each response, examine evidence, then explicitly save a judgment.
+Reviewer is the dataset author; this is NOT independent blinded evaluation.</p>
+<label>Reviewer identifier <input id="reviewer" value="dataset_author" required></label>
+<button onclick="downloadCsv()">Download reviewed CSV (partial decisions allowed)</button>
+<p id="progress"></p><div id="cards"></div>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const rows=JSON.parse(document.getElementById('data').textContent), saved=new Map();
+const fields=[
+ 'id','question','answerable','answer','abstained','sources_json',
+ 'reviewer','reviewed_at','faithfulness','correctness','hallucination','notes'
+];
+function dom(tag,txt,parent){
+ const e=document.createElement(tag);
+ e.textContent=txt||'';
+ (parent||document.body).appendChild(e);
+ return e
+}
+function select(opts,parent){
+ const s=dom('select','',parent);
+ for(const [v,label] of opts){
+  const o=dom('option',label,s);o.value=v
+ }
+ return s
+}
+function label(t,parent){return dom('label',t+' ',parent)}
+for (const r of rows){
+ const c=dom('section','',document.getElementById('cards'));
+ dom('h3',r.id+' — '+r.label,c);dom('p','Question: '+r.question,c);
+ if(r.expected)dom('p','Article-based proposed answer: '+r.expected,c);
+ dom('p','Model: '+(r.abstained==='true'?'ABSTAINED ('+r.reason+')':r.answer),c);
+ const det=dom('details','',c);dom('summary','Returned source excerpts (click to inspect)',det);
+ for(const s of r.sources)dom('pre',s.reference+' | '+s.doc_id+'\n'+s.excerpt,det);
+ const faithful=select([
+  ['','Faithfulness…'],['supported','Supported'],['partial','Partial'],
+  ['unsupported','Unsupported'],['not_applicable','Not applicable']
+ ],label('Faithfulness',c));
+ const correct=select([
+  ['','Correctness…'],['correct','Correct'],['partial','Partial'],
+  ['incorrect','Incorrect'],['not_applicable','Not applicable']
+ ],label('Correctness',c));
+ const halluc=select([
+  ['','Hallucination…'],['false','No'],['true','Yes']
+ ],label('Hallucination',c));
+ const abst=select([
+  ['','Abstention quality…'],['appropriate','Appropriate'],
+  ['false_abstention','False abstention'],['uncertain','Uncertain']
+ ],label('If abstained',c));
+ const note=dom('textarea','',c); note.placeholder='Optional comments / evidence';
+ const status=dom('p','Not reviewed',c);status.className='muted';
+ const save=dom('button','Save explicit review',c);
+ function toggle(){
+  const isAbst=r.abstained==='true';
+  faithful.disabled=isAbst;correct.disabled=isAbst;
+  halluc.disabled=isAbst;abst.disabled=!isAbst;
+ }
+ toggle();save.onclick=()=>{
+  const id=document.getElementById('reviewer').value.trim();
+  if(!id){alert('Enter reviewer ID');return}
+  const isAbst=r.abstained==='true';
+  if(isAbst){if(!abst.value){alert('Decide abstention quality');return}}
+  else if(!faithful.value||!correct.value||!halluc.value){
+   alert('Complete faithfulness, correctness and hallucination judgment');return
+  }
+  const stamp=new Date().toISOString();
+  saved.set(r.id,{...r,reviewer:id,reviewed_at:stamp,
+    faithfulness:isAbst?'not_applicable':faithful.value,
+    correctness:isAbst?'not_applicable':correct.value,
+    hallucination:isAbst?'':halluc.value,
+    notes:(isAbst?'abstention_quality='+abst.value+'; ':'')+note.value.trim()});
+  c.classList.add('ok');
+  status.textContent='Saved review in browser session. Export CSV to persist.';
+  progress();
+ };
+}
+function progress(){
+ document.getElementById('progress').textContent=
+  saved.size+'/'+rows.length+' decisions recorded (export CSV before closing the page)'
+}
+progress();
+function quoteCsv(x){let s=String(x??'');return '"'+s.replaceAll('"','""')+'"'}
+function downloadCsv(){
+ const out=[fields.join(',')];
+ for(const r of rows){
+  const x=saved.get(r.id)||{...r};
+  out.push(fields.map(k=>quoteCsv(x[k]??'')).join(','))
+ }
+const blob=new Blob(['\ufeff'+out.join('\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'});
+const a=document.createElement('a');
+a.href=URL.createObjectURL(blob);
+a.download='phase15_output_author_review.csv';
+a.click();
+setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+</script></body></html>"""
+    markup = markup.replace("__DATA__", data)
+    _atomic_write(FILE_REVIEW_HTML, markup)
+    print("HTML REVIEW:", FILE_REVIEW_HTML)
+    print("Reminder: export CSV before closing; do not assume preview is saved to disk.")
+
+
+def reviewed_report(reviewed_path: Path):
+    _, source, _ = load_predictions(strict_complete=True)
+    reviewed = load(reviewed_path)
+    src = by_id(source)
+    check(
+        len(reviewed) == 80 and set(by_id(reviewed)) == set(src),
+        "Review file must contain 80 cases",
+    )
+    for r in reviewed:
+        a = src[r["id"]]
+        check(
+            r["question"] == a["question"]
+            and r["prediction"] == a["prediction"]
+            and r["answerable"] == a["answerable"],
+            f"Incompatible review row: {r['id']}",
+        )
+    write_reports(verified=reviewed)
+    print("REVIEWS:", sum(r.get("human_review") is not None for r in reviewed), "/ 80")
+    print("Author judgments are not an independent faithfulness audit.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    for cmd in ("prepare", "report", "review-html", "reviewed-report"):
+        sub = commands.add_parser(cmd)
+        if cmd == "reviewed-report":
+            sub.add_argument("--input", required=True)
+    args = parser.parse_args()
+    if args.command == "prepare":
+        command_prepare()
+    elif args.command == "report":
+        write_reports()
+    elif args.command == "review-html":
+        render_review_html()
+    else:
+        reviewed_report(Path(args.input))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, KeyError, TypeError, OSError, UnicodeError, json.JSONDecodeError) as e:
+        print("PHASE15 STOP:", e, file=sys.stderr)
+        raise SystemExit(2) from None

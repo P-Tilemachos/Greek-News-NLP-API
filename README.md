@@ -1,6 +1,7 @@
 # Greek News NLP API
 
 [![CI](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml/badge.svg)](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml)
+
 ![Python 3.11](https://img.shields.io/badge/python-3.11-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
@@ -11,9 +12,9 @@ A REST API for Greek news: topic classification with a fine-tuned **GreekBERT**,
 - **Classification.** Fine-tuned GreekBERT on 17 IPTC topics reaches 0.825 accuracy and 0.770 macro-F1 on 788 test articles, against 0.753 / 0.667 for a TF-IDF baseline.
 - **LLM comparison.** Benchmarked against zero-shot Qwen2.5 (1.5B, 3B) and a QLoRA fine-tuned Qwen2.5-1.5B on the same test set. GreekBERT scored highest (+8.3 macro-F1 points over QLoRA, 95% bootstrap CI +3.2 to +14.1) and had the lowest latency in a single-request T4 benchmark.
 - **Retrieval.** Dense search (multilingual-e5 + FAISS), hybrid search (BM25 + dense with Reciprocal Rank Fusion) and Top-5 cross-encoder reranking, evaluated on 480 frozen synthetic queries. On later-sentence queries, Recall@1 rises from 0.31 (dense) to 0.50 (hybrid) and 0.71 (with reranking).
-- **Question answering.** The extractive `/ask` endpoint returns the source article at rank 1 for 95% of 40 answerable questions. `/rag/ask` adds grounded generative answers with citations and abstention; its faithfulness evaluation is still planned.
+- **Question answering.** The extractive `/ask` endpoint returns the source article at rank 1 for 95% of 40 answerable questions. `/rag/ask` adds grounded generative answers with citations and abstention; a Phase 15 exploratory evaluation documented 100% abstention (80/80), so answer-generation faithfulness remains unassessed.
 - **Engineering.** FastAPI, Docker image, GitHub Actions (lint, format check, tests, Docker build with a health check), and models and index hosted on the Hugging Face Hub and loaded lazily.
-- **Documented limitations.** Every benchmark records its protocol and caveats (automatic GPT-4o labels, synthetic queries, single runs).
+- **Transparent evaluation.** Benchmarks disclose label provenance, sampling assumptions, and limitations, including the Phase 15 over-abstention finding.
 
 ## Architecture
 
@@ -59,6 +60,47 @@ LLM benchmark on the same test articles (GreekBERT was re-evaluated in this run,
 | Qwen2.5-1.5B, zero-shot | 0.486 | 0.402 |
 
 Confidence intervals, latency, VRAM and caveats are in [docs/benchmarks.md](docs/benchmarks.md).
+
+## Phase 15 — Grounded RAG evaluation (exploratory)
+
+A saved-prediction evaluation of `POST /rag/ask` was run locally with
+`Qwen/Qwen2.5-1.5B-Instruct` on CPU. It used **40 author-reviewed answerable
+questions** and **40 provisional unanswerable candidates**. Two cases were
+used as development pilots; the remaining 78 are reported separately.
+The author recorded reviews for all 80 abstentions; this is **not**
+an independent, blinded evaluation or a validated gold benchmark.
+
+| Metric | 78 cases (excluding development pilots) | All 80 (including pilots) |
+|---|---:|---:|
+| Saved predictions | 78 / 78 | 80 / 80 |
+| Answers generated | **0 / 78** | **0 / 80** |
+| Abstentions | 78 / 78 (100%) | 80 / 80 (100%) |
+| Answerable questions answered | 0 / 39 (0%) | 0 / 40 (0%) |
+| Correct reference article among returned sources | 37 / 39 (94.87%) | 38 / 40 (95.00%) |
+| Review records (author, all 80) | 78 included in the 80-case review | 80 / 80 |
+
+**Finding:** the evaluated pipeline exhibits severe **over-abstention**:
+reference documents are often retrieved, but the system produces no answers.
+A reference-document hit only establishes document-ID overlap, not that the
+answer-bearing passage was available to the generator or that a citation
+supports an answer. A development example retrieved the album title `Moss`
+verbatim and still abstained.
+
+Because **no answers were generated**, answer correctness, generated-answer
+faithfulness and hallucination rates are **N/A**, not zero. The negative labels
+remain provisional and are not proof of corpus-wide unanswerability. Some
+negative-review decisions remain uncertain. Author review is not a substitute
+for independent annotation or adjudication. The original 78-case report may
+show `human_reviewed: 0` because it scores the saved predictions separately;
+the 80-case reviewed report contains all author annotations.
+
+The pilot and its evaluation code passed **86 pytest tests** and
+**`ruff check .`** locally on 1 November 2026. These checks validate the
+workflow, **not** generative answer quality. Local predictions, source excerpts,
+review records and other run artifacts remain excluded from Git.
+
+See [Phase 15 protocol, findings and limitations](docs/phase_15_rag_evaluation.md)
+for dataset caveats, detailed metrics and offline reproduction commands.
 
 ## API
 
@@ -163,6 +205,7 @@ The test suite covers API responses and input validation using mocked inference 
 - [LLM and GPU inference benchmarks](docs/benchmarks.md)
 - [Retrieval evaluation: dense, hybrid and reranking](docs/retrieval.md)
 - [Extractive QA evaluation](docs/qa_evaluation.md)
+- [Phase 15 — Grounded RAG exploratory evaluation](docs/phase_15_rag_evaluation.md)
 - Integration guides: [hybrid search](docs/phase_11_hybrid_integration.md), [reranking](docs/phase_12_reranking_integration.md), [local LLM generation](docs/phase_13_local_llm_integration.md)
 - [Reproducing the experiments](docs/reproducing.md)
 - [Full list of limitations](docs/limitations.md)
@@ -174,9 +217,12 @@ src/greek_nlp/
   api/       FastAPI app and request/response schemas
   core/      model and index download from the Hugging Face Hub
   models/    GreekBERT inference
-  rag/       Dense FAISS, BM25/E5 Hybrid RRF, lazy Cross-Encoder Top-5 reranking and extractive QA
-notebooks/   experiments and API smoke-test notebooks
-results/     benchmark, retrieval, reranking and QA evaluation outputs
+  rag/       Dense FAISS, hybrid retrieval, reranking, extractive QA and grounded RAG
+  evaluation/  Offline grounded RAG scorer and review import/export
+notebooks/   experiments and offline reporting notebooks
+scripts/     collection, reporting and developer utilities
+evaluation/  public schema and run-metadata templates (not private review data)
+results/     local benchmark and evaluation outputs (Phase 15 local data ignored)
 docs/        screenshots, reports and integration guides
 tests/       pytest suite (models are mocked, so CI needs no weights)
 Dockerfile   CPU image of the API
@@ -192,12 +238,12 @@ Dockerfile   CPU image of the API
 - Rare categories (weather, lifestyle and leisure, religion) have very few test examples, so their per-class scores are noisy.
 - Classification and dense embeddings use a maximum sequence length of 256 tokens.
 - The retrieval evaluations use automatically generated, source-excerpt queries. Full-text BM25 matches them perfectly, and this does not generalize to real user questions.
-- `/ask` is extractive and has no answerability threshold. `/rag/ask` faithfulness has not been evaluated yet, and `/generate` output is ungrounded.
+- `/ask` is extractive and has no answerability threshold. In the Phase 15 exploratory `/rag/ask` run, all 80 questions were abstained on, so response faithfulness, correctness and hallucination rates could not be measured. `/generate` output is ungrounded.
 - The LLM benchmark is a single run per model on one dataset, and the identity of the re-evaluated GreekBERT checkpoint relative to the historical one is unresolved.
+- Phase 15 negative-case labels are provisional, the two development cases are not held out, and the 80 author reviews are not independent blinded judgments.
 - There is no public live demo (a Hugging Face Spaces attempt was blocked by the free-tier CPU quota).
 
 The full list is in [docs/limitations.md](docs/limitations.md).
-
 
 ## Roadmap
 
@@ -213,17 +259,18 @@ The full list is in [docs/limitations.md](docs/limitations.md).
 - [x] Phase 11 — Opt-in hybrid retrieval integration into `/search`.
 - [x] Phase 12 — Opt-in Cross-Encoder reranking integration into `/search`.
 - [x] Phase 13 — Local open-source LLM generation through `/generate`.
-- [x] Phase 14 — Grounded generative RAG through `/rag/ask`, with source citations, evidence-based safe retry and abstention support. Offline tests and selected real-model smoke tests passed; comprehensive faithfulness evaluation remains pending.
+- [x] Phase 14 — Grounded generative RAG through `/rag/ask`, with source citations, evidence-based safe retry and abstention support. Offline tests and selected real-model smoke tests passed.
+- [x] Phase 15 — Exploratory grounded RAG evaluation workflow, 80 saved predictions, author review and transparent baseline reporting (100% abstention; no generated answers to assess).
 
 ### Planned Improvements
 
 - [ ] Reconcile historical GreekBERT checkpoints and results, and improve reproducibility of matched-input model comparisons.
 - [ ] Implement overlapping, passage-level chunking and indexing of full articles, with retrieval evaluation.
 - [ ] Evaluate retrieval relevance using independently authored, human-assessed queries before considering hybrid retrieval as the default.
+- [ ] Investigate Phase 15 over-abstention and evidence-span selection; independently verify negative labels, then run a fresh held-out assessment of answer correctness, faithfulness and hallucinations.
 - [ ] Deploy a public live demo (previous Hugging Face Spaces attempt was limited by the free-tier CPU quota).
 
 ### Upcoming Phases
 
-- [ ] Phase 15 — Evaluate RAG faithfulness, hallucinations, answerability, abstention behavior and independently human-assessed QA.
 - [ ] Phase 16 — Optimize quantization, streaming, latency, memory usage and inference performance through controlled comparisons.
 - [ ] Phase 17 — Expand end-to-end integration and regression tests, strengthen CI and documentation, and prepare v2 release validation.

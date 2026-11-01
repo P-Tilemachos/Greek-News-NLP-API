@@ -1,0 +1,13 @@
+{
+  "phase": "15",
+  "status": "NOT_EVALUATED",
+  "frozen_case_file_sha256": null,
+  "api_git_commit": null,
+  "model_id": null,
+  "model_revision": null,
+  "index_id_or_revision": null,
+  "generation_settings": {"k": 3, "max_new_tokens": 96},
+  "question_sampling_protocol": null,
+  "reviewer_protocol": null,
+  "notes": "Private template. Replace nulls with independently verified metadata."
+}
