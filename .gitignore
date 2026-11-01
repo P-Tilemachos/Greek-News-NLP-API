@@ -243,3 +243,7 @@ phase17_tests_tree.txt
 coverage.xml
 htmlcov/
 test-results.xml
+
+# Phase 17.4 local release smoke results (append to existing .gitignore)
+phase17-release-smoke.json
+phase17-real-model-smoke.json
