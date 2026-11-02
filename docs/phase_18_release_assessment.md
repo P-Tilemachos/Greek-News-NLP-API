@@ -1,8 +1,8 @@
 # Phase 18 — Final Validation & Release Assessment
 
-**Project:** Greek-News-NLP-API  
-**Assessment date:** 2026-11-02  
-**Software version observed in Phase 18 report:** `0.1.0`  
+**Project:** Greek-News-NLP-API
+**Assessment date:** 2026-11-02
+**Software version observed in Phase 18 report:** `0.1.0`
 **Decision:** **Technical validation completed; full release approval BLOCKED pending quality, security, and licensing review.**
 
 ## Verified results
@@ -51,4 +51,3 @@ Do not change the current `0.1.0` package version to `2.0.0` solely because the 
 2. Log the RAG abstention reason and whether it happens during evidence selection, initial generation, or the strict extractive retry; avoid saving private article text in public CI artifacts.
 3. Improve evidence selection and generation using the reviewed cases, without reducing evidence requirements merely to increase the answer rate.
 4. Measure answer accuracy, valid abstention rate, citation support and latency on a held-out set. Compare with the original Phase 15 result, disclosing differences in prompts and models.
-

@@ -247,3 +247,7 @@ test-results.xml
 # Phase 17.4 local release smoke results (append to existing .gitignore)
 phase17-release-smoke.json
 phase17-real-model-smoke.json
+
+# Phase 18 local validation reports (exclude from Git)
+phase18-*.json
+phase18-*.log

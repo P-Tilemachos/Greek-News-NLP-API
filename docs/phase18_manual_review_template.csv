@@ -1,0 +1,8 @@
+case_id,endpoint,probe,expected_article_id,observed_article_id,predicted_label,expected_label,relevance_0_to_3,answer_correct_yes_no_uncertain,evidence_support_yes_no_na,abstained_yes_no_na,reviewer,notes
+case_001,/classify,classify,,,,,,,,,,
+case_002,/search,search-dense,,,,,,,,,,
+case_003,/search,search-hybrid,,,,,,,,,,
+case_004,/search,search-rerank,,,,,,,,,,
+case_005,/ask,ask,,,,,,,,,,
+case_006,/generate,generate,,,,,,,,,,
+case_007,/rag/ask,rag,,,,,,,,,,
