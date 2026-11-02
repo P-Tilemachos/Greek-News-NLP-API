@@ -1,31 +1,25 @@
 # Greek News NLP API
 
 [![CI](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml)
-
 ![Python 3.11](https://img.shields.io/badge/python-3.11-blue)
-
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-A REST API for Greek news: topic classification with a fine-tuned **GreekBERT**, semantic search (dense, hybrid and reranked), extractive question answering with cited evidence, and grounded generative answers. Built with FastAPI, packaged with Docker and tested in CI. The repository also documents the experiments behind it: a benchmark of GreekBERT against zero-shot and QLoRA fine-tuned LLMs, and several retrieval evaluations.
+A research-oriented REST API for **Greek news understanding** using fine-tuned GreekBERT, semantic and hybrid search, cross-encoder reranking, extractive question answering, and optional LLM generation. Implemented with **FastAPI**, packaged with **Docker**, and checked with **GitHub Actions**. Model artifacts and the search index are distributed separately through the Hugging Face Hub.
+
+> **Project status:** Phases 11–18 have been implemented and evaluated. The current package version observed in Phase 18 is `0.1.0`; **no production readiness or v2.0.0 release is claimed**. Grounded generative RAG (`/rag/ask`) is **experimental**: its safety guard works in observed probes, but over-abstention persists even for a known-answerable question. See [Phase 18 release assessment](docs/phase_18_release_assessment.md).
 
 ## Highlights
 
-- **Classification.** Fine-tuned GreekBERT on 17 IPTC topics reaches 0.825 accuracy and 0.770 macro-F1 on 788 test articles, against 0.753 / 0.667 for a TF-IDF baseline.
-
-- **LLM comparison.** Benchmarked against zero-shot Qwen2.5 (1.5B, 3B) and a QLoRA fine-tuned Qwen2.5-1.5B on the same test set. GreekBERT scored highest (+8.3 macro-F1 points over QLoRA, 95% bootstrap CI +3.2 to +14.1) and had the lowest latency in a single-request T4 benchmark.
-
-- **Retrieval.** Dense search (multilingual-e5 + FAISS), hybrid search (BM25 + dense with Reciprocal Rank Fusion) and Top-5 cross-encoder reranking, evaluated on 480 frozen synthetic queries. On later-sentence queries, Recall@1 rises from 0.31 (dense) to 0.50 (hybrid) and 0.71 (with reranking).
-
-- **Question answering.** The extractive `/ask` endpoint returns the source article at rank 1 for 95% of 40 answerable questions. `/rag/ask` adds grounded generative answers with citations and abstention; a Phase 15 exploratory evaluation documented 100% abstention (80/80), so answer-generation faithfulness remains unassessed.
-
-- **Engineering.** FastAPI, Docker image, GitHub Actions (lint, format check, tests, Docker build with a health check), and models and index hosted on the Hugging Face Hub and loaded lazily. CI run #46 passed on `main` (1 November 2026). Phase 16 adds an opt-in localhost llama.cpp/GGUF inference backend for `/generate`, with PyTorch as the default.
-
-- **Transparent evaluation.** Benchmarks disclose label provenance, sampling assumptions, and limitations, including the Phase 15 over-abstention finding.
+- **Greek news classification.** A fine-tuned GreekBERT predicts 17 IPTC categories. On 788 held-out articles, it reached **0.825 accuracy / 0.770 macro-F1**, compared with **0.753 / 0.667** for a TF-IDF + Logistic Regression baseline. Labels were automatically assigned, not independently human-verified.
+- **LLM benchmarking.** Comparisons against zero-shot Qwen2.5 (1.5B, 3B) and QLoRA-tuned Qwen2.5-1.5B on the test set. GreekBERT achieved the best reported macro-F1; see [benchmark protocol and caveats](docs/benchmarks.md).
+- **Retrieval.** Dense multilingual-e5 + FAISS, BM25 + dense hybrid fusion (RRF), and Top-5 cross-encoder reranking. On a synthetic 480-query evaluation, later-sentence Recall@1 rose from **0.31 (dense)** to **0.50 (hybrid)** to **0.71 (reranked)**; these numbers are not a human-query relevance benchmark.
+- **Question answering.** `/ask` extracts source-grounded passages; the correct reference article appeared among returned sources for **38/40 answerable questions (95%)** in the recorded exploratory evaluation. `/rag/ask` supports citations and conservative abstention, but is **not quality-validated** for generated answers.
+- **LLM inference.** PyTorch generation through `/generate`, plus optional localhost llama.cpp/GGUF support. Phase 16 includes CPU latency, memory, and streaming experiments with explicitly stated limitations.
+- **Engineering and validation.** **204/204 local pytest tests passed**, together with Ruff lint and format checks, in the Phase 18 run (2 November 2026). Phase 17 added contract/regression tests, coverage reporting and release smoke checks. Phase 18 included real-model/API probes for classification, retrieval, extractive QA, generation and RAG; **functional PASS is not an accuracy or security certification**.
 
 ## Architecture
 
 ```mermaid
-
 flowchart LR
 
     Client --> API[FastAPI]
@@ -52,7 +46,7 @@ flowchart LR
 
     GEN --> GGUF[llama.cpp GGUF opt-in]
 
-    API -->|/rag/ask| RAG[Grounded RAG with citations]
+    API -->|/rag/ask| RAG[Experimental Grounded RAG / abstention]
 
     RAG --> RET
 
@@ -65,223 +59,129 @@ flowchart LR
     HUB -. reranker weights .-> CE
 
     HUB -. optional LLM weights .-> TORCH
-
 ```
 
 ## Results
 
 Classification on the 788-article test split (17 IPTC Media Topic categories). Macro-F1 is the main metric because the classes are imbalanced (sport has about 900 articles, weather about 30).
 
-\| Model | Accuracy | Macro-F1 |
-
-\|---|---|---|
-
-\| TF-IDF + Logistic Regression (baseline) | 0.753 | 0.667 |
-
-\| **GreekBERT (fine-tuned)** | **0.825** | **0.770** |
+| Model | Accuracy | Macro-F1 |
+|---|---|---|
+| TF-IDF + Logistic Regression (baseline) | 0.753 | 0.667 |
+| **GreekBERT (fine-tuned)** | **0.825** | **0.770** |
 
 The fine-tuned model is published on the Hugging Face Hub with a model card: [Tilemachos-P/greek-news-classifier](https://huggingface.co/Tilemachos-P/greek-news-classifier).
 
 LLM benchmark on the same test articles (GreekBERT was re-evaluated in this run, which gave 0.834 / 0.775; see the [benchmark report](docs/benchmarks.md) for the difference):
 
-\| Model | Accuracy | Macro-F1 |
-
-\|---|---|---|
-
-\| GreekBERT (fine-tuned) | **0.834** | **0.775** |
-
-\| Qwen2.5-1.5B + QLoRA | 0.777 | 0.696 |
-
-\| Qwen2.5-3B, zero-shot | 0.629 | 0.518 |
-
-\| Qwen2.5-1.5B, zero-shot | 0.486 | 0.402 |
+| Model | Accuracy | Macro-F1 |
+|---|---|---|
+| GreekBERT (fine-tuned) | **0.834** | **0.775** |
+| Qwen2.5-1.5B + QLoRA | 0.777 | 0.696 |
+| Qwen2.5-3B, zero-shot | 0.629 | 0.518 |
+| Qwen2.5-1.5B, zero-shot | 0.486 | 0.402 |
 
 Confidence intervals, latency, VRAM and caveats are in [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Phase 15 — Grounded RAG evaluation (exploratory)
 
-A saved-prediction evaluation of `POST /rag/ask` was run locally with
+The local saved-prediction evaluation of `POST /rag/ask` used `Qwen/Qwen2.5-1.5B-Instruct` on CPU and **40 author-reviewed answerable questions** plus **40 provisional unanswerable candidates**. Two cases served as development pilots; results for the other 78 were also reported separately. All 80 abstentions were reviewed by the author, **not** by an independent or blinded evaluation team.
 
-`Qwen/Qwen2.5-1.5B-Instruct` on CPU. It used **40 author-reviewed answerable
+| Metric | 78 cases (excluding pilots) | All 80 cases |
+|---|---:|---:|
+| Saved predictions | 78 / 78 | 80 / 80 |
+| Answers generated | **0 / 78** | **0 / 80** |
+| Abstentions | 78 / 78 (100%) | 80 / 80 (100%) |
+| Answerable questions answered | 0 / 39 (0%) | 0 / 40 (0%) |
+| Correct reference article among returned sources | 37 / 39 (94.87%) | 38 / 40 (95.00%) |
+| Author-reviewed records | Included in the 80-case review | 80 / 80 |
 
-questions** and **40 provisional unanswerable candidates**. Two cases were
+**Finding: severe over-abstention.** Retrieval often found the expected document, but the generator produced no answers. Document-ID overlap alone does **not** demonstrate that the answer-bearing passage was available to the generator or that a citation supports an answer. In one development example, the album title `Moss` appeared verbatim in retrieved evidence and the pipeline still abstained.
 
-used as development pilots; the remaining 78 are reported separately.
+Because **no answers were generated**, answer correctness, citation faithfulness and hallucination rates are **N/A**, not zero. Negative-case labels remain provisional; some author-review decisions are uncertain, and the two pilot cases are not held-out. The 78-case saved-prediction report may show `human_reviewed: 0` because it was scored separately; the 80-case review contains the author annotations.
 
-The author recorded reviews for all 80 abstentions; this is **not**
-
-an independent, blinded evaluation or a validated gold benchmark.
-
-\| Metric | 78 cases (excluding development pilots) | All 80 (including pilots) |
-
-\|---|---:|---:|
-
-\| Saved predictions | 78 / 78 | 80 / 80 |
-
-\| Answers generated | **0 / 78** | **0 / 80** |
-
-\| Abstentions | 78 / 78 (100%) | 80 / 80 (100%) |
-
-\| Answerable questions answered | 0 / 39 (0%) | 0 / 40 (0%) |
-
-\| Correct reference article among returned sources | 37 / 39 (94.87%) | 38 / 40 (95.00%) |
-
-\| Review records (author, all 80) | 78 included in the 80-case review | 80 / 80 |
-
-**Finding:** the evaluated pipeline exhibits severe **over-abstention**:
-
-reference documents are often retrieved, but the system produces no answers.
-
-A reference-document hit only establishes document-ID overlap, not that the
-
-answer-bearing passage was available to the generator or that a citation
-
-supports an answer. A development example retrieved the album title `Moss`
-
-verbatim and still abstained.
-
-Because **no answers were generated**, answer correctness, generated-answer
-
-faithfulness and hallucination rates are **N/A**, not zero. The negative labels
-
-remain provisional and are not proof of corpus-wide unanswerability. Some
-
-negative-review decisions remain uncertain. Author review is not a substitute
-
-for independent annotation or adjudication. The original 78-case report may
-
-show `human_reviewed: 0` because it scores the saved predictions separately;
-
-the 80-case reviewed report contains all author annotations.
-
-The pilot and its evaluation code passed **86 pytest tests** and
-
-**`ruff check .`** locally on 1 November 2026. These checks validate the
-
-workflow, **not** generative answer quality. Local predictions, source excerpts,
-
-review records and other run artifacts remain excluded from Git.
-
-See [Phase 15 protocol, findings and limitations](docs/phase_15_rag_evaluation.md)
-
-for dataset caveats, detailed metrics and offline reproduction commands.
+The evaluation workflow passed **86 local pytest tests and Ruff lint** on 1 November 2026. Those checks validate evaluation code, **not** generation quality. Predictions, source excerpts and review records remain excluded from Git. See the [Phase 15 protocol and limitations](docs/phase_15_rag_evaluation.md).
 
 ## Phase 16 — CPU inference performance and optional GGUF backend
 
-Phase 16 evaluated CPU inference using a fixed **development-only** Greek `/generate`
+Phase 16 compared HTTP end-to-end CPU inference on a **single development-only Greek `/generate` prompt**, using one warm-up and three measured requests per configuration. The original PyTorch model remains the default; a llama.cpp/GGUF backend is an **explicit opt-in for `/generate` only**. Grounded `/rag/ask` still uses PyTorch and its known quality issues were not solved by these backend experiments.
 
-prompt, one warm-up and three measured HTTP requests per configuration. These are
+| Configuration | Median HTTP latency | Observed peak server RSS | Notes |
+|---|---:|---:|---|
+| PyTorch CPU, Qwen2.5-1.5B-Instruct | 25.21 s | 6,002.13 MiB | FP32 baseline |
+| llama.cpp, Qwen2.5-1.5B-Instruct GGUF Q4_K_M | 2.79 s | 1,156.09 MiB | ~9.04× lower median latency for this prompt |
+| llama.cpp, Llama-Krikri-8B-Instruct GGUF Q4_K_M | 11.14 s | 4,841.20 MiB | Different, Greek-focused model |
 
-**end-to-end** timings, not isolated model kernel performance. The original PyTorch
+All configurations generated **48 output tokens** in the matched workload. RSS denotes a sampled Windows **working-set approximation** for already-loaded processes, **not** unique model RAM, startup peak or system memory. Results combine a backend change with different weight formats; they do **not** isolate quantization effects.
 
-Qwen model remains the default; llama.cpp is an **explicit opt-in** for `/generate`
+A Qwen GGUF streaming probe reported **57.93 ms median first-visible-content latency** and **2.37 s median full streamed response latency**. First-visible-content timing is not necessarily internal model TTFT and can benefit from prompt caching. A provisional synthetic eight-case Greek quality screen for Krikri yielded **7/8 acceptable** responses; one failed conflict handling by making an unsupported certainty claim. This is not a comprehensive or independently adjudicated quality benchmark.
 
-only. The grounded `/rag/ask` pipeline continues to use the original PyTorch
-
-model and has **not** had its Phase 15 over-abstention issue resolved.
-
-\| Configuration | Median HTTP latency | Observed peak server RSS | Notes |
-
-\|---|---:|---:|---|
-
-\| PyTorch CPU, Qwen2.5-1.5B-Instruct | 25.21 s | 6,002.13 MiB | FP32 CPU baseline |
-
-\| llama.cpp, Qwen2.5-1.5B-Instruct GGUF Q4_K_M | 2.79 s | 1,156.09 MiB | \~9.04× lower median latency on this prompt |
-
-\| llama.cpp, Llama-Krikri-8B-Instruct GGUF Q4_K_M | 11.14 s | 4,841.20 MiB | Greek-focused candidate; different model |
-
-All three configurations produced 48 output tokens in this matched development
-
-workload. RSS is a sampled Windows **working-set** approximation for already-loaded
-
-server processes, **not** startup peak, unique model allocation or system-wide RAM.
-
-The faster result combines **backend and weight-format changes**; it is not an
-
-isolated quantization benefit. A separate Qwen GGUF streaming probe measured
-
-median first-visible-content latency of **57.93 ms** and full streamed response
-
-latency of **2.37 s**; the former is not necessarily an internal model TTFT and
-
-may benefit from prompt caching.
-
-A small, **synthetic eight-case Greek quality screen** for Krikri was assessed
-
-provisionally as **7/8 acceptable**. It failed conflict handling by making an
-
-unsupported certainty claim. This is not an independent, blinded or comprehensive
-
-quality benchmark; raw answers and review material remain **local, ignored by Git**.
-
-The local opt-in integration returned HTTP 200 with the Krikri model ID, and the full local suite passed **132 tests** and Ruff checks. GitHub Actions CI run [#46](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml) on `main` (commit `157fff8`, 1 November 2026) also passed both `test` and `docker` jobs. These automated checks do **not** establish end-to-end real-model quality or independently validate the benchmark results.
+The local opt-in HTTP integration returned a successful response with a Krikri model ID. The Phase 16 suite passed 132 local tests and Ruff checks, and [GitHub CI #46](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions/workflows/ci.yml) passed `test` and `docker` jobs on `main` (1 November 2026). These automated checks **do not establish real-model answer quality**.
 
 ### Optional llama.cpp backend (local development)
 
-First, install llama.cpp independently, obtain the model in its cache and start
-
-its server **on loopback only**, in a separate terminal:
+First, install llama.cpp and obtain the model, then start its server **on loopback only** in a separate terminal:
 
 ```bat
-
 llama serve -hf ilsp/Llama-Krikri-8B-Instruct-GGUF:Q4_K_M --host 127.0.0.1 --port 9931 -t 8 -c 2048 -ngl 0
-
 ```
 
-Then start FastAPI in another Windows Command Prompt / Anaconda Prompt:
+In another Windows Command Prompt or Anaconda Prompt, configure FastAPI:
 
 ```bat
-
 set "LLM_BACKEND=llamacpp"
-
 set "LLAMACPP_BASE_URL=http://127.0.0.1:9931"
-
 set "LLAMACPP_MODEL_MATCH=Krikri"
-
 python -m uvicorn greek_nlp.api.main:app --host 127.0.0.1 --port 8001
-
 ```
 
-The `/generate` request and response schema remains unchanged. Without the
+The `/generate` schema is unchanged. Without `LLM_BACKEND=llamacpp`, the original PyTorch generator is used. This optional backend needs a separately running llama.cpp service. A successful FastAPI `/health` does **not** verify it is available. **Do not expose the unauthenticated local LLM server publicly** without suitable authentication, network restrictions and deployment controls. Check model-specific license terms independently of the MIT code license.
 
-explicit `LLM_BACKEND=llamacpp` setting, the existing PyTorch generator is used.
+See [Phase 16 experimental results](docs/phase_16_results.md) and [optional llama.cpp integration](docs/phase_16_optional_llamacpp_integration.md).
 
-This experimental external backend requires its own running server; a FastAPI
+## Phase 17 — API regression testing and CI hardening
 
-`/health` success does **not** establish llama.cpp availability. Do not expose
+Phase 17 expanded the test suite and introduced reproducible release-oriented checks:
 
-the unauthenticated llama.cpp service publicly; implement authentication, network
+- **API contracts:** `/health`, OpenAPI schema, documented routes and invalid-request validation.
+- **Regression tests:** mocked endpoint behavior for classification, dense/hybrid/reranked search, extractive QA, grounded RAG and generation/backends. Mocks keep these CI tests fast, but cannot establish real-model quality.
+- **CI:** Ruff lint and formatting, pytest with coverage/JUnit reports, Docker build, and HTTP smoke validation. Coverage was **75%** in the recorded Phase 17 baseline; this is not a claim about the current overall coverage after Phase 18 changes.
+- **Release smoke:** `/health` and `/openapi.json` return successful responses, while deliberately malformed generation and RAG requests return expected validation errors (`422`).
 
-restrictions and deployment controls before considering public access. Verify
+The Phase 17.4 GitHub Actions workflow [run #50](https://github.com/P-Tilemachos/Greek-News-NLP-API/actions) was reported successful on `main`. See [CI hardening](docs/phase_17_3_ci_hardening.md) and [release smoke validation](docs/phase_17_4_release_validation.md).
 
-model-specific license terms separately from this repository's MIT license.
+## Phase 18 — Real-model validation and RAG safety
 
-See [Phase 16 experimental results and caveats](docs/phase_16_results.md) and
+Local live-model/API probes were performed against a running FastAPI server. These are **functional sanity checks**, not independently reviewed benchmarks.
 
-[optional llama.cpp integration](docs/phase_16_optional_llamacpp_integration.md).
+| Component | Phase 18 observation | Qualification |
+|---|---|---|
+| `/classify` — GreekBERT | PASS | Returned a valid real-model prediction; no new accuracy claim |
+| `/search` — dense, hybrid, rerank | PASS | Real retrieval/index and reranker exercised; relevance not human-reviewed |
+| `/ask` — extractive QA | PASS | Valid extractive response; not a full answer-quality evaluation |
+| `/generate` — PyTorch | PASS | Generated non-empty output; factuality not verified |
+| `/rag/ask` — grounded RAG | Technical PASS; quality **not passed** | Grounding/safety guards can abstain, but answerable questions remain unanswered |
+| Local automated suite | **204 tests passed** | Plus Ruff lint and formatting on 2 November 2026 |
+
+**Known RAG limitation.** A Phase 15 exploratory review recorded **80/80 abstentions**. In Phase 18, a known-answerable question about disciplinary responsibility for the Mandra floods retrieved a relevant evidence excerpt (article `macocu.el.9211668`) but returned **`Answer: None`**. A broad flood question also abstained. The output guard prevented a malformed answer from being shown, while the **over-abstention and unverified citation faithfulness remain unresolved**. The broader safety and licensing checks have not been approved.
+
+The report [Phase 18 — Release Assessment](docs/phase_18_release_assessment.md) records the evidence and outstanding release gates. Do not interpret HTTP 200, a citation, or `faithfulness_verified: false` as a measure of factual correctness.
+
+**Release decision:** implementation and technical validation are documented, but **production/v2 release approval is pending** independent RAG quality review (or explicit feature exclusion), licensing obligations, deployment security, and final CI confirmation for the intended release commit.
 
 ## API
 
-\| Endpoint | Description |
-
-\|---|---|
-
-\| `GET /health` | API liveness check; does not verify model or index readiness |
-
-\| `POST /classify` | Top-k predicted categories with scores for a Greek text |
-
-\| `POST /search` | Dense E5/FAISS by default; opt-in `mode: "hybrid"` (BM25 + E5 + RRF) or `mode: "rerank"` (hybrid + Cross-Encoder Top-5) |
-
-\| `POST /ask` | Extractive question answering: the most relevant sentences with article ids, plus the source articles |
-
-\| `POST /rag/ask` | Grounded generative answer with source citations and abstention |
-
-\| `POST /generate` | Bounded ungrounded generation: PyTorch by default, opt-in localhost llama.cpp/GGUF (Phase 16) |
+| Endpoint | Description |
+|---|---|
+| `GET /health` | API liveness check; does not verify model or index readiness |
+| `POST /classify` | Top-k predicted categories with scores for a Greek text |
+| `POST /search` | Dense E5/FAISS by default; opt-in `mode: "hybrid"` (BM25 + E5 + RRF) or `mode: "rerank"` (hybrid + Cross-Encoder Top-5) |
+| `POST /ask` | Extractive question answering: the most relevant sentences with article ids, plus the source articles |
+| `POST /rag/ask` | **Experimental** grounded generation with citations and conservative abstention; generated-answer quality not approved |
+| `POST /generate` | Bounded **ungrounded** generation: PyTorch by default; opt-in local llama.cpp/GGUF (Phase 16) |
 
 Example `/classify` request:
-
 ```json
-
 {
 
   "text": "Η κυβέρνηση ανακοίνωσε νέα μέτρα στήριξης για τους αγρότες λόγω των πλημμυρών",
@@ -289,17 +189,11 @@ Example `/classify` request:
   "top_k": 3
 
 }
-
 ```
-
 Example `/search` request with hybrid retrieval:
-
 ```json
-
 {"query": "πλημμύρες και αποζημιώσεις αγροτών", "k": 5, "mode": "hybrid"}
-
 ```
-
 Omitting `mode` keeps dense-only search. Interactive documentation (Swagger) is available at `/docs` when the server is running.
 
 ## Demo
@@ -313,113 +207,94 @@ Screenshots of the API running locally (Swagger UI).
 ## Quickstart
 
 Use Python 3.11 inside an activated virtual or Conda environment:
-
 ```bash
-
 git clone https://github.com/P-Tilemachos/Greek-News-NLP-API.git
 
 cd Greek-News-NLP-API
 
 python -m pip install -e ".[dev,ml]"
-
 ```
-
 Configure the public Hugging Face repositories and start the API.
 
 **Windows (Command Prompt / Anaconda Prompt):**
-
 ```bat
-
 set "HF_MODEL_REPO=Tilemachos-P/greek-news-classifier"
 
 set "HF_INDEX_REPO=Tilemachos-P/greek-news-index"
 
 python -m uvicorn greek_nlp.api.main:app --reload
-
 ```
-
 **Linux / macOS (Bash):**
-
 ```bash
-
 export HF_MODEL_REPO=Tilemachos-P/greek-news-classifier
 
 export HF_INDEX_REPO=Tilemachos-P/greek-news-index
 
 python -m uvicorn greek_nlp.api.main:app --reload
-
 ```
-
 Open [Swagger UI](http://127.0.0.1:8000/docs) to try the endpoints. The first request to each component may take longer while its artifacts are downloaded and loaded. Initial downloads require internet access.
 
 Model weights and the search index are not stored in this repository. They are loaded from `models_store/` (`greek-bert-news-classifier/` and `rag_index/`). If a folder is missing, the API downloads it from the Hugging Face Hub, using these environment variables:
 
-\| Variable | Purpose |
-
-\|---|---|
-
-\| `HF_MODEL_REPO` | Hub repository containing the fine-tuned classifier |
-
-\| `HF_INDEX_REPO` | Hub repository containing the FAISS index and article texts |
-
-\| `HF_TOKEN` | Access token, only needed for private repositories |
-
-\| `MODELS_DIR` | Optional: custom location of the local model store |
+| Variable | Purpose |
+|---|---|
+| `HF_MODEL_REPO` | Hub repository containing the fine-tuned classifier |
+| `HF_INDEX_REPO` | Hub repository containing the FAISS index and article texts |
+| `HF_TOKEN` | Access token, only needed for private repositories |
+| `MODELS_DIR` | Optional: custom location of the local model store |
 
 The index can be rebuilt locally with `python -m greek_nlp.rag.retriever` after running the data notebooks.
 
 ## Docker
 
 Run these commands from the repository root with Docker running:
-
 ```bash
-
 docker build -t greek-news-nlp-api .
 
 docker run --rm -p 8000:8000 -e HF_MODEL_REPO=Tilemachos-P/greek-news-classifier -e HF_INDEX_REPO=Tilemachos-P/greek-news-index greek-news-nlp-api
-
 ```
-
 This example does not mount persistent storage, so downloaded artifacts inside the container are removed when it is deleted. The classifier ([greek-news-classifier](https://huggingface.co/Tilemachos-P/greek-news-classifier)) and the search index ([greek-news-index](https://huggingface.co/datasets/Tilemachos-P/greek-news-index)) are public on the Hugging Face Hub, so no token is needed.
 
 ## Tests and CI
 
+Install the development dependencies (`python -m pip install -e ".[dev]"`) before running checks:
 ```bash
-
 python -m pytest -q
-
 python -m ruff check .
-
 python -m ruff format --check .
-
+python -m pip check
 ```
+Coverage and machine-readable test reports:
+```bash
+python -m pytest -q --cov=greek_nlp --cov-report=term-missing:skip-covered --cov-report=xml:coverage.xml --junitxml=test-results.xml
+```
+**Most recent locally shared Phase 18 validation:** 204 passing tests with no Ruff lint/format errors. The test suite emphasizes API contracts, mocked inference and regression checks; it does not require downloading model weights during CI. **Real-model checks are separate**, require the relevant models/index and local resources, and do not run as proof of model correctness in the standard CI workflow.
 
-The test suite covers API responses and input validation using mocked inference components, plus artifact download path handling using a simulated Hub download. Tests do not download model weights or require a Hugging Face token. GitHub Actions CI runs on pushes to `main` and pull requests in two jobs: `test` (Ruff lint, formatting and pytest) and `docker` (image build and `/health` smoke test). The latest verified run shared for this update, **#46**, passed both jobs on 1 November 2026. These checks do not establish real-model inference quality.
+GitHub Actions runs on pushes to `main` and pull requests. Its `test` job runs lint/format checks, pytest and reporting; the `docker` job builds the image and checks HTTP liveness/validation behavior. The project has successfully completed prior CI runs; the **final Phase 18 commit (`2d47398`) should be checked in Actions before release approval**, rather than inferring its outcome from the local tests.
+
+Local real-model and review scripts:
+```bash
+# Start the API in a separate terminal first.
+python scripts/phase18_real_model_validation.py --probe classify --timeout 300 --report phase18-classify.json
+python scripts/phase18_final_rag_review.py --show-answers --timeout 600
+```
+Local Phase 18 JSON reports and private review data should not be committed to Git. The final RAG review demonstrates current limitations, not a passing answer-quality gate.
 
 ## Documentation
 
 - [LLM and GPU inference benchmarks](docs/benchmarks.md)
-
 - [Retrieval evaluation: dense, hybrid and reranking](docs/retrieval.md)
-
 - [Extractive QA evaluation](docs/qa_evaluation.md)
-
 - [Phase 15 — Grounded RAG exploratory evaluation](docs/phase_15_rag_evaluation.md)
-
-- [Phase 16 — CPU/GGUF results and limitations](docs/phase_16_results.md)
-
-- [Phase 16 — Optional llama.cpp integration](docs/phase_16_optional_llamacpp_integration.md)
-
+- [Phase 16 — CPU/GGUF results and limitations](docs/phase_16_results.md) and [optional llama.cpp integration](docs/phase_16_optional_llamacpp_integration.md)
+- [Phase 17 — CI hardening](docs/phase_17_3_ci_hardening.md) and [release validation](docs/phase_17_4_release_validation.md)
+- [Phase 18 — Final validation and release assessment](docs/phase_18_release_assessment.md)
 - Integration guides: [hybrid search](docs/phase_11_hybrid_integration.md), [reranking](docs/phase_12_reranking_integration.md), [local LLM generation](docs/phase_13_local_llm_integration.md)
-
-- [Reproducing the experiments](docs/reproducing.md)
-
-- [Full list of limitations](docs/limitations.md)
+- [Reproducing the experiments](docs/reproducing.md) and [full list of limitations](docs/limitations.md)
 
 ## Project structure
 
 ```
-
 src/greek_nlp/
 
   api/       FastAPI app and request/response schemas
@@ -440,14 +315,13 @@ scripts/     collection, reporting and developer utilities
 
 evaluation/  public schema and run-metadata templates (not private review data)
 
-results/     local benchmark and evaluation outputs (Phase 15/16 local data ignored)
+results/     local benchmark/evaluation outputs (keep private run artifacts out of Git)
 
 docs/        screenshots, reports and integration guides
 
-tests/       pytest suite (models are mocked, so CI needs no weights)
+tests/       pytest contract, regression, safety and release validation checks
 
 Dockerfile   CPU image of the API
-
 ```
 
 ## Data
@@ -456,67 +330,48 @@ Dockerfile   CPU image of the API
 
 ## Limitations
 
-- Labels were assigned automatically by GPT-4o, so classification metrics measure agreement with those labels, not verified human ground truth.
+- **Labels:** The classification labels were assigned automatically by GPT-4o. Reported metrics measure agreement with these labels, not verified human ground truth. Rare categories have small test counts, so per-class scores are noisy.
+- **Context length:** Classification and dense embeddings use a maximum of 256 tokens.
+- **Retrieval evaluation:** Frozen, automatically generated source-excerpt queries are not representative of independent real-world user questions. Benchmark improvements do not demonstrate production relevance quality.
+- **Grounded RAG:** The Phase 15 exploratory set showed 80/80 abstentions; Phase 18 still abstained on a known-answerable Mandra query despite returning relevant evidence. Its conservative output guard rejects malformed generation, but **answer quality, groundedness and citation faithfulness are not independently validated**. Negative labels in the earlier evaluation remain provisional; the author reviews were not blinded.
+- **Generation:** `/generate` is ungrounded and may produce incorrect content. The Phase 16 CPU/GGUF performance and Greek-quality experiments were small development screens, not isolated or independently replicated benchmarks. llama.cpp must remain loopback-restricted unless deployment protections are added.
+- **Reproducibility:** The identity of the re-evaluated GreekBERT checkpoint versus the historical one remains unresolved. Certain model comparisons were single runs.
+- **Security and licenses:** MIT applies to the repository's code, not automatically to the training corpus, model weights or other assets. Production authentication, rate limiting, resource controls, secret management and third-party license compliance require a separate review.
+- **Deployment:** No public live demo is currently available; a previous Hugging Face Spaces attempt was limited by free-tier CPU quota. This repository is **not certified production-ready**.
 
-- Rare categories (weather, lifestyle and leisure, religion) have very few test examples, so their per-class scores are noisy.
-
-- Classification and dense embeddings use a maximum sequence length of 256 tokens.
-
-- The retrieval evaluations use automatically generated, source-excerpt queries. Full-text BM25 matches them perfectly, and this does not generalize to real user questions.
-
-- `/ask` is extractive and has no answerability threshold. In the Phase 15 exploratory `/rag/ask` run, all 80 questions were abstained on, so response faithfulness, correctness and hallucination rates could not be measured. `/generate` output is ungrounded.
-
-- The LLM benchmark is a single run per model on one dataset, and the identity of the re-evaluated GreekBERT checkpoint relative to the historical one is unresolved.
-
-- Phase 15 negative-case labels are provisional, the two development cases are not held out, and the 80 author reviews are not independent blinded judgments.
-
-- Phase 16 results are development-only single-workload experiments. Runtime, tokenization and quantization differ across backends; Greek answer-quality screening is limited to eight synthetic cases with one known failure, not independent validation. The llama.cpp service is local-only and unauthenticated.
-
-- There is no public live demo (a Hugging Face Spaces attempt was blocked by the free-tier CPU quota).
-
-The full list is in [docs/limitations.md](docs/limitations.md).
+See [docs/limitations.md](docs/limitations.md) and the [Phase 18 release assessment](docs/phase_18_release_assessment.md).
 
 ## Roadmap
 
-### Completed
+### Completed — Implementation and validation work
 
 - [x] Data preprocessing, stratified splitting and TF-IDF baseline.
-
 - [x] GreekBERT fine-tuning, classification evaluation and `/classify` API.
-
-- [x] Dense semantic retrieval with multilingual-e5 and FAISS, and extractive `/ask`.
-
+- [x] Dense multilingual-e5 / FAISS retrieval and extractive `/ask`.
 - [x] Docker packaging, automated tests, GitHub Actions CI and Hugging Face model card.
-
 - [x] Open-source LLM benchmarking and controlled Tesla T4 inference evaluation.
+- [x] Offline BM25, dense E5, hybrid RRF and cross-encoder reranking evaluations.
+- [x] Extractive QA evaluation with 40 answerable questions (Notebook 10).
+- [x] **Phase 11:** Opt-in hybrid retrieval for `/search`.
+- [x] **Phase 12:** Opt-in cross-encoder reranking for `/search`.
+- [x] **Phase 13:** Local open-source generation via `/generate`.
+- [x] **Phase 14:** Grounded RAG endpoint `/rag/ask` with citations, safe retry and abstention support (not quality-certified).
+- [x] **Phase 15:** Exploratory RAG evaluation, 80 saved predictions and transparent over-abstention reporting.
+- [x] **Phase 16:** CPU/GGUF latency and memory experiments, streaming checks and optional local llama.cpp backend.
+- [x] **Phase 17:** API contract/regression tests, CI hardening, coverage and release smoke validation; CI #50 passed.
+- [x] **Phase 18:** Real-model/API sanity probes, RAG evidence and output-guard refinements, **204 local passing tests**, and final release assessment. The known-answerable RAG case still abstained; quality approval was **not** achieved.
 
-- [x] Offline BM25, Dense E5, Hybrid RRF and Cross-Encoder reranking evaluations.
+### Open release gates (not yet completed)
 
-- [x] Extractive QA benchmark with 40 answerable questions (Notebook 10).
+- [ ] Confirm final CI status for Phase 18 commit and reconcile uncommitted documentation changes.
+- [ ] Review license terms for the article corpus, model weights, and redistributed artifacts separately from the MIT code license.
+- [ ] Complete deployment security review (authentication, rate limits, resource controls, secrets and external LLM service restrictions).
+- [ ] Independently review a held-out QA set and verify answer correctness, appropriate abstention and citation support; alternatively exclude experimental RAG from the approved release scope.
+- [ ] Approve release scope and version; create a GitHub release/tag only after the gates above are met.
 
-- [x] Phase 11 — Opt-in hybrid retrieval integration into `/search`.
+### Planned improvements
 
-- [x] Phase 12 — Opt-in Cross-Encoder reranking integration into `/search`.
-
-- [x] Phase 13 — Local open-source LLM generation through `/generate`.
-
-- [x] Phase 14 — Grounded generative RAG through `/rag/ask`, with source citations, evidence-based safe retry and abstention support. Offline tests and selected real-model smoke tests passed.
-
-- [x] Phase 15 — Exploratory grounded RAG evaluation workflow, 80 saved predictions, author review and transparent baseline reporting (100% abstention; no generated answers to assess).
-- [x] Phase 16 — Local CPU/GGUF latency and memory profiling, streaming probe, provisional eight-case Greek quality screen, and opt-in llama.cpp/GGUF backend for `/generate`. Local tests and GitHub CI #46 (`test` and `docker`) passed; real-model and answer-quality validation remains limited.
-
-### Planned Improvements
-
-- [ ] Reconcile historical GreekBERT checkpoints and results, and improve reproducibility of matched-input model comparisons.
-
-- [ ] Implement overlapping, passage-level chunking and indexing of full articles, with retrieval evaluation.
-
-- [ ] Evaluate retrieval relevance using independently authored, human-assessed queries before considering hybrid retrieval as the default.
-
-- [ ] Investigate Phase 15 over-abstention and evidence-span selection; independently verify negative labels, then run a fresh held-out assessment of answer correctness, faithfulness and hallucinations.
-
-- [ ] Deploy a public live demo (previous Hugging Face Spaces attempt was limited by the free-tier CPU quota).
-
-### Upcoming Phases
-
-- [ ] Phase 17 — Expand end-to-end integration and regression tests, strengthen CI and documentation, and prepare v2 release validation.
+- [ ] Reconcile historical GreekBERT checkpoints and improve reproducibility of model comparisons.
+- [ ] Build overlapping passage-level indexing and assess evidence extraction/retrieval against human-reviewed questions.
+- [ ] Improve over-abstention without weakening citation or safety checks; independently validate answerability and faithfulness.
+- [ ] Deploy a public live demo when hosting resources and security controls permit.
