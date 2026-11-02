@@ -87,6 +87,29 @@ def _sentences(text: str) -> list[str]:
     ]
 
 
+def _contextual_passages(text: str, query_terms: set[str]) -> list[tuple[str, bool]]:
+    """Include an adjacent sentence only when question-relevant wording links them.
+
+    The sentences must be contiguous in the original document and the complete
+    combined passage must fit the original 155-character evidence limit.
+    Token overlap is a retrieval heuristic, not an entailment check.
+    """
+    sentences = _sentences(text)
+    passages = []
+    for index, sentence in enumerate(sentences):
+        passages.append((sentence, False))
+        if index + 1 >= len(sentences):
+            continue
+        following = sentences[index + 1]
+        combined = f"{sentence} {following}"
+        shared = _keywords(sentence) & _keywords(following) & query_terms
+        if shared and len(combined) <= MAX_EXCERPT_CHARS and combined in text:
+            # Do not stitch excerpts across paragraph breaks or normalized
+            # whitespace: the cited passage must occur literally in the corpus.
+            passages.append((combined, True))
+    return passages
+
+
 def _candidate_excerpts(question: str, hits: list[dict], docs: dict[str, dict]) -> list[dict]:
     query_terms = _keywords(question)
     if not query_terms:
@@ -99,8 +122,9 @@ def _candidate_excerpts(question: str, hits: list[dict], docs: dict[str, dict]) 
         if not doc or not isinstance(doc.get("text"), str):
             continue
         best = None
-        for passage in _sentences(doc["text"]):
-            # Only cite a contiguous excerpt that itself contains matching terms.
+        best_score = (-1, -1)
+        for passage, contextual in _contextual_passages(doc["text"], query_terms):
+            # Only cite a contiguous excerpt from the original article.
             windows = [passage[:MAX_EXCERPT_CHARS]]
             if len(passage) > MAX_EXCERPT_CHARS:
                 windows.extend(
@@ -111,10 +135,14 @@ def _candidate_excerpts(question: str, hits: list[dict], docs: dict[str, dict]) 
                 if len(window) < 35:
                     continue
                 overlap = len(query_terms & _keywords(window))
-                if overlap >= minimum_matches:
-                    candidate = (overlap, window)
-                    if best is None or candidate[0] > best[0]:
-                        best = candidate
+                if overlap < minimum_matches:
+                    continue
+                # When equally relevant, retain the tightly related next
+                # sentence: it may contain the actual answer-bearing phrase.
+                score = (overlap, int(contextual))
+                if score > best_score:
+                    best_score = score
+                    best = (overlap, window)
         if best is None:
             continue
         overlap, passage = best
@@ -220,12 +248,23 @@ def _fit_prompt(question: str, sources: list[dict], generator: Generator) -> str
 
 def _extractive_retry_prompt(question: str, source: dict) -> str:
     """Single-evidence extraction prompt. The source remains untrusted data."""
-    if "ποτε" in tokenize_greek(question):
+    question_tokens = tokenize_greek(question)
+    if "ποτε" in question_tokens:
         # Prompt type confirmed by the separate real-model time-expression probe.
         instruction = (
             "Extract the time expression from the Greek evidence that answers "
             "the question. Copy the time expression as written in the evidence "
             "and then add [1]. Do not provide any explanation."
+        )
+    elif "ποιουσ" in question_tokens or "ποιεσ" in question_tokens:
+        # Do not infer an entity from general topical overlap. Ask only for
+        # an explicit answer span copied from the provided source text.
+        instruction = (
+            "Βρες στα τεκμήρια ποιοι αναφέρονται ρητά ως αποδέκτες. "
+            "Αν υπάρχει ακριβής φράση που απαντά στο 'σε ποιους/ποιες', "
+            "αντέγραψέ την ΑΥΤΟΥΣΙΑ και πρόσθεσε [1]. "
+            "Αλλιώς γράψε ΑΝΕΠΑΡΚΗ ΣΤΟΙΧΕΙΑ. "
+            "Μην επαναλάβεις την ερώτηση και μη δώσεις εξηγήσεις."
         )
     else:
         instruction = (
@@ -279,6 +318,23 @@ def _try_verbatim_retry(
     return checked, result
 
 
+def _invalid_generated_answer(answer: str, question: str, sources: list[dict]) -> bool:
+    """Reject obvious prompt echo / missing citations, not semantic hallucinations.
+
+    Citation presence and echo detection are *structural* safeguards only.
+    They do not establish faithfulness, factuality, or answer relevance.
+    """
+    rendered = _safe_context(answer).casefold()
+    query = _safe_context(question).casefold().strip(" \t\r\n?!.;·")
+    if query and query in rendered:
+        return True
+    # Leakage of the prompt's references/instructions is not an answer.
+    if re.search(r"(?:^|\n)\s*(?:τεκμήρια|ερώτηση|evidence|question)\s*(?::|\[)", answer, re.I):
+        return True
+    # A citation must point to an actual source used for generation.
+    return not any(1 <= int(ref) <= len(sources) for ref in re.findall(r"\[(\d+)\]", answer))
+
+
 def _abstain(reason: str, sources: list[dict] | None = None) -> dict:
     return {
         "mode": "grounded_rag",
@@ -320,6 +376,15 @@ class GroundedRAG:
                 return _abstain("model_abstained", sources)
             answer, output = retry
             sources = sources[:1]  # retry saw exactly one article ([1])
+        # A citation alone is not proof of faithfulness, but missing citations,
+        # verbatim question echoes and leaked prompt sections are clear failures.
+        # Give the existing verbatim-only retry one chance; otherwise abstain.
+        if _invalid_generated_answer(answer, question, sources):
+            retry = _try_verbatim_retry(question, sources, generator, max_new_tokens)
+            if retry is None:
+                return _abstain("invalid_generated_answer", sources)
+            answer, output = retry
+            sources = sources[:1]  # retry used exactly source [1]
         # Do not expose fabricated numeric source labels emitted by the model.
         answer = re.sub(
             r"\[(\d+)\]",
